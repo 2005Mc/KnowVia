@@ -4,7 +4,29 @@
    No database
    No localStorage
 ========================================================= */
+function escapeHTML(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
+function formatAIResponse(text) {
+  if (!text) {
+    return "<p>No response received from AI.</p>";
+  }
+
+  return escapeHTML(text)
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/^### (.*)$/gm, "<h3>$1</h3>")
+    .replace(/^## (.*)$/gm, "<h3>$1</h3>")
+    .replace(/^# (.*)$/gm, "<h3>$1</h3>")
+    .replace(/^- (.*)$/gm, "<li>$1</li>")
+    .replace(/\n\n/g, "</p><p>")
+    .replace(/\n/g, "<br>");
+}
 const $ = (id) => document.getElementById(id);
 
 const state = {
