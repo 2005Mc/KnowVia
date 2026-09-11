@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Knowvia - AI Learning Assistant</title>
+
+    <link rel="stylesheet"
+          href="css/style.css">
+
+</head>
+
+
+<body>
+
+
+    <!-- =========================
+         NAVIGATION BAR
+    ========================== -->
+
+    <header class="navbar">
+
+        <div class="logo">
+            Knowvia
+        </div>
+
+
+        <nav>
+
+            <a href="#home">
+                Home
+            </a>
+
+            <a href="#summary">
+                Summary
+            </a>
+
+            <a href="#flashcards">
+                Flashcards
+            </a>
+
+            <a href="#quiz">
+                Quiz
+            </a>
+
+        </nav>
+
+
+        <button id="themeBtn">
+            🌙
+        </button>
+
+    </header>
+
+
+
+    <!-- =========================
+         HOME SECTION
+    ========================== -->
+
+    <section id="home"
+             class="hero">
+
+
+        <div class="hero-content">
+
+
+            <h1>
+                Learn Smarter with Knowvia
+            </h1>
+
+
+            <p>
+                Enter any topic and turn it into
+                summaries, flashcards and quizzes.
+            </p>
+
+
+
+            <!-- Topic Input -->
+
+            <div class="topic-box">
+
+
+                <label for="topic">
+                    What do you want to learn?
+                </label>
+
+
+                <input
+                    type="text"
+                    id="topic"
+                    placeholder="Example: Machine Learning"
+                >
+
+
+
+                <!-- Difficulty -->
+
+                <label for="difficulty">
+                    Difficulty Level
+                </label>
+
+
+                <select id="difficulty">
+
+                    <option value="beginner">
+                        Beginner
+                    </option>
+
+                    <option value="intermediate">
+                        Intermediate
+                    </option>
+
+                    <option value="advanced">
+                        Advanced
+                    </option>
+
+                </select>
+
+
+
+                <!-- Generate Button -->
+
+                <button
+                    id="generateBtn"
+                    class="primary-btn">
+
+                    Generate Study Material
+
+                </button>
+
+
+            </div>
+
+
+        </div>
+
+
+    </section>
+
+
+
+    <!-- =========================
+         SUMMARY SECTION
+    ========================== -->
+
+    <section id="summary"
+             class="section">
+
+
+        <h2>
+            Study Summary
+        </h2>
+
+
+        <div id="summaryContent">
+
+            <p>
+                Enter a topic above to generate
+                your study material.
+            </p>
+
+        </div>
+
+
+    </section>
+
+
+
+    <!-- =========================
+         FLASHCARD SECTION
+    ========================== -->
+
+    <section id="flashcards"
+             class="section">
+
+
+        <h2>
+            Flashcards
+        </h2>
+
+
+
+        <div class="flashcard-container">
+
+
+            <div id="flashcard"
+                 class="flashcard">
+
+
+                <!-- Front -->
+
+                <div class="card-front">
+
+                    <p id="cardQuestion">
+
+                        Your question will
+                        appear here.
+
+                    </p>
+
+                </div>
+
+
+
+                <!-- Back -->
+
+                <div class="card-back">
+
+                    <p id="cardAnswer">
+
+                        Your answer will
+                        appear here.
+
+                    </p>
+
+                </div>
+
+
+            </div>
+
+
+        </div>
+
+
+
+        <!-- Flashcard Buttons -->
+
+        <div class="flashcard-controls">
+
+
+            <button id="prevCard">
+
+                Previous
+
+            </button>
+
+
+            <button id="flipCard">
+
+                Flip
+
+            </button>
+
+
+            <button id="nextCard">
+
+                Next
+
+            </button>
+
+
+        </div>
+
+
+
+        <p id="cardProgress">
+
+            Card 0 / 0
+
+        </p>
+
+
+    </section>
+
+
+
+    <!-- =========================
+         QUIZ SECTION
+    ========================== -->
+
+    <section id="quiz"
+             class="section">
+
+
+        <h2>
+            Test Your Knowledge
+        </h2>
+
+
+        <div id="quizContainer">
+
+            <p>
+                Generate a topic to start
+                your quiz.
+            </p>
+
+        </div>
+
+
+    </section>
+
+
+
+    <!-- =========================
+         FOOTER
+    ========================== -->
+
+    <footer>
+
+        <p>
+
+            © 2026 Knowvia |
+            Learn • Remember • Practice
+
+        </p>
+
+    </footer>
+
+
+
+    <!-- JavaScript -->
+
+    <script src="js/app.js"></script>
+
+
+</body>
+
+</html>
