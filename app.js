@@ -1,1171 +1,2614 @@
-/* =====================================================
-   KNOWVIA - LEARNING DATA + APPLICATION LOGIC
-===================================================== */
+/* =========================================================
+   KNOWVIA - AI STUDY COMPANION
+   Frontend Demo Version
+   No database
+   No localStorage
+========================================================= */
 
+const $ = (id) => document.getElementById(id);
 
-/* =====================================================
-   STUDY DATA
-===================================================== */
+const state = {
+  source: "topic",
+  material: "",
+  title: "",
+  difficulty: "beginner",
 
-const studyData = {
+  flashcards: [],
+  cardIndex: 0,
 
-    /* =================================================
-       MACHINE LEARNING
-    ================================================= */
+  quiz: [],
+  quizIndex: 0,
+  score: 0,
+  answered: false,
 
-    "machine learning": {
+  confidenceData: [],
+  wrongAnswers: [],
+  weakConcepts: [],
 
-        beginner: {
+  extracted: false
+};
 
-            summary: `
-                <h3>Machine Learning</h3>
+/* =========================================================
+   TOPIC DATA
+========================================================= */
 
-                <p>
-                    Machine Learning (ML) is a branch of Artificial Intelligence
-                    that allows computers to learn from data and make predictions
-                    or decisions without being explicitly programmed for every
-                    situation. Instead of giving a computer instructions for
-                    every possible case, we provide examples and allow the
-                    machine to discover useful patterns.
-                </p>
+const topicPacks = {
 
-                <p>
-                    For example, a machine learning system can learn from
-                    previous emails and identify whether a new email is likely
-                    to be spam. Similarly, recommendation systems can study
-                    what users previously watched or purchased and suggest
-                    something they may like.
-                </p>
+  "machine learning": {
 
-                <h4>🔑 Key Concepts</h4>
-
-                <ul>
-                    <li><strong>Data:</strong> Information used by a machine learning system.</li>
-                    <li><strong>Model:</strong> A mathematical representation that learns patterns from data.</li>
-                    <li><strong>Training:</strong> The process of teaching a model using data.</li>
-                    <li><strong>Prediction:</strong> The output produced by a trained model.</li>
-                </ul>
-
-                <h4>📌 Main Types</h4>
-
-                <ul>
-                    <li><strong>Supervised Learning:</strong> Learning from labeled data.</li>
-                    <li><strong>Unsupervised Learning:</strong> Finding patterns in data without labels.</li>
-                    <li><strong>Reinforcement Learning:</strong> Learning through rewards and penalties.</li>
-                </ul>
-
-                <h4>💡 Important Point</h4>
-
-                <p>
-                    The main idea of Machine Learning is that computers can
-                    improve their performance by learning from examples and
-                    experience rather than relying only on manually written
-                    rules.
-                </p>
-            `,
-
-            flashcards: [
-
-                {
-                    question: "What is Machine Learning?",
-                    answer: "Machine Learning is a branch of AI that allows computers to learn patterns from data and make predictions or decisions."
-                },
-
-                {
-                    question: "What is a dataset?",
-                    answer: "A dataset is a collection of information used to train, test or analyze a machine learning system."
-                },
-
-                {
-                    question: "What is a model?",
-                    answer: "A model is a mathematical representation that learns useful patterns from data."
-                },
-
-                {
-                    question: "What is training?",
-                    answer: "Training is the process of teaching a machine learning model using data."
-                },
-
-                {
-                    question: "What is supervised learning?",
-                    answer: "Supervised learning uses labeled data to train a machine learning model."
-                },
-
-                {
-                    question: "What is unsupervised learning?",
-                    answer: "Unsupervised learning discovers patterns or groups in data without labeled outputs."
-                },
-
-                {
-                    question: "What is reinforcement learning?",
-                    answer: "Reinforcement learning allows an agent to learn through rewards and penalties."
-                },
-
-                {
-                    question: "Give one application of Machine Learning.",
-                    answer: "Spam email detection is an example of a Machine Learning application."
-                }
-
-            ]
-
+    beginner: {
+      title: "Machine Learning",
+      summary:
+        "Machine Learning is a branch of Artificial Intelligence that allows computers to learn patterns from data and make predictions or decisions without being explicitly programmed for every task.",
+      concepts: [
+        "Artificial Intelligence",
+        "Machine Learning",
+        "Data",
+        "Features",
+        "Labels",
+        "Training",
+        "Testing"
+      ],
+      stages: [
+        "Collect data",
+        "Prepare the data",
+        "Choose a model",
+        "Train the model",
+        "Test the model",
+        "Evaluate the results"
+      ],
+      flashcards: [
+        {
+          q: "What is Machine Learning?",
+          a: "Machine Learning is a method where computers learn patterns from data and use them to make predictions or decisions."
         },
-
-
-        intermediate: {
-
-            summary: `
-                <h3>Machine Learning — Intermediate</h3>
-
-                <p>
-                    Machine Learning is a computational approach in which
-                    algorithms learn relationships and patterns from data to
-                    perform tasks such as classification, regression,
-                    clustering and prediction. Instead of explicitly
-                    programming the rules for every situation, a model learns
-                    those relationships from examples.
-                </p>
-
-                <p>
-                    A typical machine learning workflow begins with collecting
-                    data, cleaning it, selecting useful features, splitting
-                    the dataset into training and testing portions, training
-                    a model and evaluating its performance using appropriate
-                    metrics.
-                </p>
-
-                <h4>🔑 Key Concepts</h4>
-
-                <ul>
-                    <li><strong>Features:</strong> Input variables used by the model.</li>
-                    <li><strong>Labels:</strong> Target outputs in supervised learning.</li>
-                    <li><strong>Training Data:</strong> Data used to learn model parameters.</li>
-                    <li><strong>Testing Data:</strong> Unseen data used to evaluate the model.</li>
-                    <li><strong>Classification:</strong> Predicting categories or classes.</li>
-                    <li><strong>Regression:</strong> Predicting continuous numerical values.</li>
-                    <li><strong>Clustering:</strong> Grouping similar data points.</li>
-                </ul>
-
-                <h4>⚙️ Main Stages of a Machine Learning System</h4>
-
-                <ol>
-                    <li>Collect relevant data.</li>
-                    <li>Clean and preprocess the data.</li>
-                    <li>Select or engineer useful features.</li>
-                    <li>Split the data into training and testing sets.</li>
-                    <li>Train a suitable algorithm.</li>
-                    <li>Evaluate the model.</li>
-                    <li>Use the trained model for predictions.</li>
-                </ol>
-
-                <h4>💡 Example</h4>
-
-                <p>
-                    Suppose we want to predict whether a student will pass an
-                    examination. Attendance, internal marks and study hours
-                    can be used as features. The model learns from previous
-                    student records and predicts the result for a new student.
-                </p>
-
-                <h4>📌 Important Point</h4>
-
-                <p>
-                    A good machine learning model should perform well not only
-                    on training data but also on previously unseen data.
-                </p>
-            `,
-
-            flashcards: [
-
-                {
-                    question: "What is a feature?",
-                    answer: "A feature is an input variable or measurable property used by a machine learning model."
-                },
-
-                {
-                    question: "What is a label?",
-                    answer: "A label is the target output that a supervised learning model tries to predict."
-                },
-
-                {
-                    question: "What is classification?",
-                    answer: "Classification is a machine learning task in which the model predicts a category or class."
-                },
-
-                {
-                    question: "What is regression?",
-                    answer: "Regression predicts continuous numerical values, such as price, temperature or salary."
-                },
-
-                {
-                    question: "What is clustering?",
-                    answer: "Clustering groups similar data points together without requiring labeled outputs."
-                },
-
-                {
-                    question: "Why is data preprocessing important?",
-                    answer: "Preprocessing improves data quality and prepares it for effective model training."
-                },
-
-                {
-                    question: "Why is test data used?",
-                    answer: "Test data evaluates how well a trained model performs on unseen data."
-                },
-
-                {
-                    question: "What is a machine learning workflow?",
-                    answer: "It generally includes data collection, preprocessing, feature preparation, training, evaluation and prediction."
-                }
-
-            ]
-
+        {
+          q: "What is training data?",
+          a: "Training data is the data used to teach a machine learning model."
         },
-
-
-        advanced: {
-
-            summary: `
-                <h3>Machine Learning — Advanced</h3>
-
-                <p>
-                    At an advanced level, Machine Learning can be viewed as
-                    the process of estimating a function or probability
-                    distribution from observed data so that the learned model
-                    can generalize to previously unseen examples. The goal is
-                    not simply to memorize training data but to learn patterns
-                    that remain useful on new data.
-                </p>
-
-                <p>
-                    During training, a model attempts to minimize an objective
-                    or loss function. Optimization algorithms such as Gradient
-                    Descent adjust model parameters to reduce this loss.
-                    Hyperparameters, such as learning rate, model complexity
-                    and regularization strength, are selected separately from
-                    the learned parameters.
-                </p>
-
-                <h4>🔑 Key Concepts</h4>
-
-                <ul>
-                    <li><strong>Loss Function:</strong> Measures the difference between predicted and actual values.</li>
-                    <li><strong>Optimization:</strong> Process of finding model parameters that minimize the objective.</li>
-                    <li><strong>Overfitting:</strong> When a model learns training data too closely and performs poorly on new data.</li>
-                    <li><strong>Underfitting:</strong> When a model is too simple to capture important patterns.</li>
-                    <li><strong>Regularization:</strong> Technique used to control model complexity.</li>
-                    <li><strong>Generalization:</strong> Ability of a model to perform well on unseen data.</li>
-                    <li><strong>Hyperparameters:</strong> Configuration values chosen before or during training.</li>
-                </ul>
-
-                <h4>⚙️ Advanced Stages</h4>
-
-                <ol>
-                    <li>Problem formulation and objective definition.</li>
-                    <li>Data collection and exploratory analysis.</li>
-                    <li>Data preprocessing and feature engineering.</li>
-                    <li>Model selection.</li>
-                    <li>Training and optimization.</li>
-                    <li>Hyperparameter tuning.</li>
-                    <li>Cross-validation and evaluation.</li>
-                    <li>Error analysis and model improvement.</li>
-                    <li>Deployment and monitoring.</li>
-                </ol>
-
-                <h4>📊 Model Evaluation</h4>
-
-                <p>
-                    Different tasks require different evaluation metrics.
-                    Classification can use accuracy, precision, recall and
-                    F1-score, while regression can use metrics such as Mean
-                    Absolute Error and Mean Squared Error.
-                </p>
-
-                <h4>⚠️ Overfitting</h4>
-
-                <p>
-                    Overfitting occurs when a model performs extremely well on
-                    training data but poorly on unseen data. It can be reduced
-                    through techniques such as regularization, cross-validation,
-                    data augmentation and appropriate model selection.
-                </p>
-            `,
-
-            flashcards: [
-
-                {
-                    question: "What is a loss function?",
-                    answer: "A loss function measures the difference between a model's prediction and the expected output."
-                },
-
-                {
-                    question: "What is Gradient Descent?",
-                    answer: "Gradient Descent is an optimization method that iteratively updates model parameters to reduce the loss function."
-                },
-
-                {
-                    question: "What is overfitting?",
-                    answer: "Overfitting occurs when a model learns training data too closely and performs poorly on unseen data."
-                },
-
-                {
-                    question: "What is underfitting?",
-                    answer: "Underfitting occurs when a model is too simple to capture important patterns in the data."
-                },
-
-                {
-                    question: "What is regularization?",
-                    answer: "Regularization controls model complexity to reduce overfitting."
-                },
-
-                {
-                    question: "What is generalization?",
-                    answer: "Generalization is the ability of a model to perform effectively on previously unseen data."
-                },
-
-                {
-                    question: "What are hyperparameters?",
-                    answer: "Hyperparameters are configuration values selected outside the normal parameter-learning process, such as learning rate or regularization strength."
-                },
-
-                {
-                    question: "Why is cross-validation used?",
-                    answer: "Cross-validation helps estimate how well a model is likely to perform on unseen data and assists in model selection."
-                }
-
-            ]
-
+        {
+          q: "What is a feature?",
+          a: "A feature is an input property or characteristic used by a machine learning model."
+        },
+        {
+          q: "What is a label?",
+          a: "A label is the expected output or answer associated with training data."
+        },
+        {
+          q: "What is testing?",
+          a: "Testing checks how well a trained model performs on data it has not seen during training."
         }
-
+      ]
     },
 
-
-    /* =================================================
-       COMPUTER VISION
-    ================================================= */
-
-    "computer vision": {
-
-        beginner: {
-
-            summary: `
-                <h3>Computer Vision</h3>
-
-                <p>
-                    Computer Vision is a field of Artificial Intelligence that
-                    helps computers understand and interpret images and videos.
-                    Just as humans use their eyes and brain to understand the
-                    world, computer vision systems use cameras, images and
-                    algorithms to extract useful information.
-                </p>
-
-                <p>
-                    Computer vision can be used to identify objects, recognize
-                    faces, detect edges, classify images and understand scenes.
-                </p>
-
-                <h4>🔑 Key Concepts</h4>
-
-                <ul>
-                    <li>Images are represented as digital data.</li>
-                    <li>Image processing improves or transforms images.</li>
-                    <li>Object detection finds objects in an image.</li>
-                    <li>Image classification assigns categories to images.</li>
-                </ul>
-
-                <h4>⚙️ Basic Stages</h4>
-
-                <ol>
-                    <li>Capture or collect an image.</li>
-                    <li>Preprocess the image.</li>
-                    <li>Extract useful information.</li>
-                    <li>Analyze or classify the image.</li>
-                    <li>Produce the required result.</li>
-                </ol>
-
-                <h4>💡 Applications</h4>
-
-                <p>
-                    Computer Vision is used in face recognition, medical
-                    imaging, security systems, autonomous vehicles and
-                    quality inspection.
-                </p>
-            `,
-
-            flashcards: [
-
-                {
-                    question: "What is Computer Vision?",
-                    answer: "Computer Vision is a field of AI that enables computers to understand and analyze images and videos."
-                },
-
-                {
-                    question: "What is an image?",
-                    answer: "A digital image is a representation of visual information stored as numerical pixel data."
-                },
-
-                {
-                    question: "What is image classification?",
-                    answer: "Image classification assigns an image to a particular category."
-                },
-
-                {
-                    question: "What is object detection?",
-                    answer: "Object detection identifies and locates objects within an image."
-                },
-
-                {
-                    question: "What is image preprocessing?",
-                    answer: "Image preprocessing prepares an image for further analysis by operations such as resizing or noise reduction."
-                },
-
-                {
-                    question: "Give one Computer Vision application.",
-                    answer: "Face recognition is one common Computer Vision application."
-                }
-
-            ]
-
+    intermediate: {
+      title: "Machine Learning",
+      summary:
+        "Machine Learning uses algorithms to learn relationships within datasets. A typical workflow includes preprocessing, feature selection, model training, validation and evaluation. Common learning types include supervised, unsupervised and reinforcement learning.",
+      concepts: [
+        "Supervised Learning",
+        "Unsupervised Learning",
+        "Reinforcement Learning",
+        "Feature Engineering",
+        "Model Training",
+        "Validation",
+        "Overfitting",
+        "Evaluation"
+      ],
+      stages: [
+        "Problem definition",
+        "Data collection",
+        "Data preprocessing",
+        "Feature engineering",
+        "Model selection",
+        "Training",
+        "Validation",
+        "Testing",
+        "Evaluation"
+      ],
+      flashcards: [
+        {
+          q: "What is supervised learning?",
+          a: "Supervised learning learns from labelled examples where both input data and expected outputs are available."
         },
-
-
-        intermediate: {
-
-            summary: `
-                <h3>Computer Vision — Intermediate</h3>
-
-                <p>
-                    Computer Vision combines image processing, pattern
-                    recognition and machine learning techniques to extract
-                    meaningful information from visual data. A computer vision
-                    pipeline usually converts raw images into representations
-                    that algorithms can analyze.
-                </p>
-
-                <h4>🔑 Key Concepts</h4>
-
-                <ul>
-                    <li><strong>Pixels:</strong> Basic elements representing an image.</li>
-                    <li><strong>Color Space:</strong> A method of representing colors such as RGB or HSV.</li>
-                    <li><strong>Filtering:</strong> Used to smooth images or highlight important structures.</li>
-                    <li><strong>Edges:</strong> Boundaries where image intensity changes significantly.</li>
-                    <li><strong>Features:</strong> Useful characteristics extracted from images.</li>
-                </ul>
-
-                <h4>⚙️ Computer Vision Pipeline</h4>
-
-                <ol>
-                    <li>Image acquisition.</li>
-                    <li>Image preprocessing.</li>
-                    <li>Noise reduction and enhancement.</li>
-                    <li>Feature extraction.</li>
-                    <li>Object or pattern recognition.</li>
-                    <li>Classification or decision making.</li>
-                </ol>
-
-                <h4>💡 Example</h4>
-
-                <p>
-                    In a face recognition system, an image may first be
-                    converted into a suitable format, noise may be reduced,
-                    facial features may be extracted and a recognition model
-                    can then compare the extracted representation with known
-                    faces.
-                </p>
-            `,
-
-            flashcards: [
-
-                {
-                    question: "What is a pixel?",
-                    answer: "A pixel is the smallest addressable element of a digital image."
-                },
-
-                {
-                    question: "What is image filtering?",
-                    answer: "Filtering applies mathematical operations to image pixels to reduce noise, smooth an image or highlight features."
-                },
-
-                {
-                    question: "What is an edge?",
-                    answer: "An edge is a region where image intensity changes significantly and often represents a boundary."
-                },
-
-                {
-                    question: "Why is feature extraction used?",
-                    answer: "Feature extraction identifies useful characteristics that can help a computer vision algorithm analyze an image."
-                },
-
-                {
-                    question: "What is image acquisition?",
-                    answer: "Image acquisition is the process of obtaining an image from a camera, scanner or other source."
-                },
-
-                {
-                    question: "What is a Computer Vision pipeline?",
-                    answer: "It is a sequence of operations such as acquisition, preprocessing, feature extraction and recognition."
-                }
-
-            ]
-
+        {
+          q: "What is unsupervised learning?",
+          a: "Unsupervised learning discovers patterns or structures in data without labelled outputs."
         },
-
-
-        advanced: {
-
-            summary: `
-                <h3>Computer Vision — Advanced</h3>
-
-                <p>
-                    Advanced Computer Vision focuses on extracting high-level
-                    semantic information from visual data using mathematical
-                    image processing, machine learning and deep learning.
-                    Modern systems frequently use convolutional neural networks
-                    and transformer-based architectures to learn hierarchical
-                    representations directly from images.
-                </p>
-
-                <h4>🔑 Key Concepts</h4>
-
-                <ul>
-                    <li><strong>Convolution:</strong> Operation used to extract spatial patterns from images.</li>
-                    <li><strong>Feature Maps:</strong> Representations produced by convolutional layers.</li>
-                    <li><strong>Segmentation:</strong> Assigning labels to pixels or regions.</li>
-                    <li><strong>Object Detection:</strong> Locating and classifying objects.</li>
-                    <li><strong>Representation Learning:</strong> Automatically learning useful image features.</li>
-                </ul>
-
-                <h4>⚙️ Advanced Processing Stages</h4>
-
-                <ol>
-                    <li>Image acquisition and normalization.</li>
-                    <li>Preprocessing and augmentation.</li>
-                    <li>Feature or representation extraction.</li>
-                    <li>Model inference.</li>
-                    <li>Detection, classification or segmentation.</li>
-                    <li>Post-processing.</li>
-                    <li>Evaluation using appropriate metrics.</li>
-                </ol>
-
-                <h4>📊 Applications</h4>
-
-                <p>
-                    Advanced Computer Vision is used in autonomous driving,
-                    medical diagnosis, surveillance, industrial inspection,
-                    augmented reality and robotics.
-                </p>
-            `,
-
-            flashcards: [
-
-                {
-                    question: "What is convolution in Computer Vision?",
-                    answer: "Convolution is a mathematical operation that applies filters to image data to extract spatial patterns."
-                },
-
-                {
-                    question: "What is a feature map?",
-                    answer: "A feature map is a representation produced by a neural network layer showing where learned visual patterns occur."
-                },
-
-                {
-                    question: "What is image segmentation?",
-                    answer: "Image segmentation assigns labels to pixels or regions so that different objects or areas can be separated."
-                },
-
-                {
-                    question: "How is object detection different from classification?",
-                    answer: "Classification identifies what an image contains, while object detection also identifies where objects are located."
-                },
-
-                {
-                    question: "What is representation learning?",
-                    answer: "Representation learning automatically discovers useful features or representations from raw data."
-                },
-
-                {
-                    question: "Why is image augmentation used?",
-                    answer: "Image augmentation creates varied training examples to improve model robustness and reduce overfitting."
-                }
-
-            ]
-
+        {
+          q: "What is overfitting?",
+          a: "Overfitting occurs when a model learns the training data too closely and performs poorly on unseen data."
+        },
+        {
+          q: "What is feature engineering?",
+          a: "Feature engineering is the process of creating, selecting or transforming input features to improve model performance."
+        },
+        {
+          q: "Why is validation important?",
+          a: "Validation helps select and tune a model while reducing the risk of overfitting to the training dataset."
         }
-
+      ]
     },
 
-
-    /* =================================================
-       PYTHON
-    ================================================= */
-
-    "python": {
-
-        beginner: {
-
-            summary: `
-                <h3>Python Programming</h3>
-
-                <p>
-                    Python is a high-level, general-purpose programming
-                    language known for its simple syntax and readability.
-                    It is widely used by beginners as well as professional
-                    developers.
-                </p>
-
-                <p>
-                    Python can be used to create applications, automate tasks,
-                    analyze data and develop Artificial Intelligence systems.
-                </p>
-
-                <h4>🔑 Key Concepts</h4>
-
-                <ul>
-                    <li>Variables store values.</li>
-                    <li>Conditions allow programs to make decisions.</li>
-                    <li>Loops repeat instructions.</li>
-                    <li>Functions organize reusable code.</li>
-                    <li>Lists store collections of values.</li>
-                </ul>
-
-                <h4>⚙️ Basic Learning Stages</h4>
-
-                <ol>
-                    <li>Learn variables and data types.</li>
-                    <li>Understand operators.</li>
-                    <li>Learn conditional statements.</li>
-                    <li>Practice loops.</li>
-                    <li>Create functions.</li>
-                    <li>Work with lists and dictionaries.</li>
-                </ol>
-            `,
-
-            flashcards: [
-
-                {
-                    question: "What is Python?",
-                    answer: "Python is a high-level, general-purpose programming language known for its simple and readable syntax."
-                },
-
-                {
-                    question: "What is a variable?",
-                    answer: "A variable is a name used to store or refer to a value."
-                },
-
-                {
-                    question: "What is a loop?",
-                    answer: "A loop repeatedly executes a block of code."
-                },
-
-                {
-                    question: "What is a function?",
-                    answer: "A function is a reusable block of code designed to perform a particular task."
-                },
-
-                {
-                    question: "What is a list?",
-                    answer: "A list is an ordered collection that can store multiple values."
-                },
-
-                {
-                    question: "Give one use of Python.",
-                    answer: "Python is widely used for Data Science and Artificial Intelligence."
-                }
-
-            ]
-
+    advanced: {
+      title: "Machine Learning",
+      summary:
+        "Advanced Machine Learning involves designing models that generalize effectively from finite datasets. Important concerns include bias-variance trade-off, regularization, cross-validation, feature representation, optimization and reliable evaluation.",
+      concepts: [
+        "Bias-Variance Trade-off",
+        "Regularization",
+        "Cross Validation",
+        "Hyperparameters",
+        "Gradient Descent",
+        "Generalization",
+        "Model Selection",
+        "Evaluation Metrics"
+      ],
+      stages: [
+        "Problem formulation",
+        "Dataset construction",
+        "Data preprocessing",
+        "Representation learning",
+        "Model selection",
+        "Hyperparameter tuning",
+        "Cross-validation",
+        "Final training",
+        "Generalization evaluation"
+      ],
+      flashcards: [
+        {
+          q: "What is the bias-variance trade-off?",
+          a: "It describes the balance between errors caused by overly simple assumptions and errors caused by excessive sensitivity to training data."
         },
-
-
-        intermediate: {
-
-            summary: `
-                <h3>Python — Intermediate</h3>
-
-                <p>
-                    Python provides a large collection of built-in data types,
-                    functions and modules that allow developers to build
-                    applications efficiently. Its object-oriented programming
-                    features also allow programs to be organized using classes
-                    and objects.
-                </p>
-
-                <h4>🔑 Key Concepts</h4>
-
-                <ul>
-                    <li><strong>Lists:</strong> Mutable ordered collections.</li>
-                    <li><strong>Tuples:</strong> Ordered collections that are immutable.</li>
-                    <li><strong>Dictionaries:</strong> Key-value data structures.</li>
-                    <li><strong>Functions:</strong> Reusable blocks of logic.</li>
-                    <li><strong>Classes:</strong> Blueprints used for creating objects.</li>
-                    <li><strong>Modules:</strong> Files containing reusable Python code.</li>
-                </ul>
-
-                <h4>⚙️ Important Programming Stages</h4>
-
-                <ol>
-                    <li>Design the problem solution.</li>
-                    <li>Select appropriate data structures.</li>
-                    <li>Write functions and reusable components.</li>
-                    <li>Handle exceptions.</li>
-                    <li>Use modules and libraries.</li>
-                    <li>Test and debug the program.</li>
-                </ol>
-
-                <h4>💡 Example</h4>
-
-                <p>
-                    A student management application could use dictionaries
-                    to represent student information, functions to process
-                    marks and classes to organize student-related operations.
-                </p>
-            `,
-
-            flashcards: [
-
-                {
-                    question: "What is a tuple?",
-                    answer: "A tuple is an ordered collection that cannot normally be modified after creation."
-                },
-
-                {
-                    question: "What is a dictionary?",
-                    answer: "A dictionary stores data using key-value pairs."
-                },
-
-                {
-                    question: "What is a class?",
-                    answer: "A class is a blueprint used to create objects in object-oriented programming."
-                },
-
-                {
-                    question: "What is exception handling?",
-                    answer: "Exception handling allows a program to respond appropriately to runtime errors."
-                },
-
-                {
-                    question: "What is a module?",
-                    answer: "A module is a Python file containing reusable code such as functions, classes or variables."
-                },
-
-                {
-                    question: "Why are functions useful?",
-                    answer: "Functions improve code reuse, organization and maintainability."
-                }
-
-            ]
-
+        {
+          q: "What is regularization?",
+          a: "Regularization adds constraints or penalties to a model to reduce overfitting and improve generalization."
         },
-
-
-        advanced: {
-
-            summary: `
-                <h3>Python — Advanced</h3>
-
-                <p>
-                    Advanced Python programming involves understanding the
-                    language's object model, iterators, generators, decorators,
-                    context managers, asynchronous programming and efficient
-                    software design. Python programs can also interact with
-                    external libraries and system resources through well-defined
-                    interfaces.
-                </p>
-
-                <h4>🔑 Key Concepts</h4>
-
-                <ul>
-                    <li><strong>Generators:</strong> Produce values lazily using iteration.</li>
-                    <li><strong>Decorators:</strong> Modify or extend function behavior.</li>
-                    <li><strong>Iterators:</strong> Objects that provide sequential access to elements.</li>
-                    <li><strong>Context Managers:</strong> Manage resources safely using constructs such as <code>with</code>.</li>
-                    <li><strong>Async Programming:</strong> Supports efficient handling of concurrent I/O operations.</li>
-                </ul>
-
-                <h4>⚙️ Advanced Development Stages</h4>
-
-                <ol>
-                    <li>Analyze requirements and architecture.</li>
-                    <li>Design reusable modules.</li>
-                    <li>Choose efficient data structures and algorithms.</li>
-                    <li>Implement error handling and resource management.</li>
-                    <li>Write automated tests.</li>
-                    <li>Profile and optimize performance.</li>
-                    <li>Deploy and maintain the application.</li>
-                </ol>
-
-                <h4>📌 Important Point</h4>
-
-                <p>
-                    Advanced Python development is not only about knowing more
-                    syntax. It involves writing code that is reusable,
-                    maintainable, testable, efficient and appropriate for
-                    the problem being solved.
-                </p>
-            `,
-
-            flashcards: [
-
-                {
-                    question: "What is a generator?",
-                    answer: "A generator is an iterator-producing construct that yields values lazily instead of storing all results at once."
-                },
-
-                {
-                    question: "What is a decorator?",
-                    answer: "A decorator is a mechanism used to modify or extend the behavior of a function or class."
-                },
-
-                {
-                    question: "What is an iterator?",
-                    answer: "An iterator is an object that provides a way to access elements sequentially."
-                },
-
-                {
-                    question: "What is a context manager?",
-                    answer: "A context manager manages resources and ensures appropriate setup and cleanup, commonly used with the with statement."
-                },
-
-                {
-                    question: "What is asynchronous programming?",
-                    answer: "Asynchronous programming allows tasks, particularly I/O operations, to progress without unnecessarily blocking the program."
-                },
-
-                {
-                    question: "Why is testing important in advanced Python development?",
-                    answer: "Testing helps verify correctness, detect regressions and make software easier to maintain."
-                }
-
-            ]
-
+        {
+          q: "What is cross-validation?",
+          a: "Cross-validation repeatedly divides data into training and validation portions to estimate how well a model generalizes."
+        },
+        {
+          q: "What are hyperparameters?",
+          a: "Hyperparameters are settings chosen before or during training, such as learning rate, tree depth or regularization strength."
+        },
+        {
+          q: "What is generalization?",
+          a: "Generalization is the ability of a trained model to perform well on previously unseen data."
         }
-
+      ]
     }
+
+  },
+
+  "computer vision": {
+
+    beginner: {
+      title: "Computer Vision",
+      summary:
+        "Computer Vision is a field of Artificial Intelligence that enables computers to understand and process images and videos.",
+      concepts: [
+        "Image",
+        "Pixel",
+        "Image Processing",
+        "Object",
+        "Edge",
+        "Feature",
+        "Classification"
+      ],
+      stages: [
+        "Capture image",
+        "Preprocess image",
+        "Extract useful information",
+        "Analyze the image",
+        "Produce the result"
+      ],
+      flashcards: [
+        {
+          q: "What is Computer Vision?",
+          a: "Computer Vision enables computers to analyze and understand images and videos."
+        },
+        {
+          q: "What is a pixel?",
+          a: "A pixel is the smallest addressable element of a digital image."
+        },
+        {
+          q: "What is image processing?",
+          a: "Image processing involves applying operations to images to improve or analyze them."
+        },
+        {
+          q: "What is edge detection?",
+          a: "Edge detection identifies strong changes in image intensity that often correspond to object boundaries."
+        },
+        {
+          q: "What is image classification?",
+          a: "Image classification assigns an image to one or more predefined categories."
+        }
+      ]
+    },
+
+    intermediate: {
+      title: "Computer Vision",
+      summary:
+        "Computer Vision combines image processing and machine learning techniques to extract meaningful information from visual data. Common operations include filtering, segmentation, feature extraction, object detection and classification.",
+      concepts: [
+        "Filtering",
+        "Convolution",
+        "Edge Detection",
+        "Segmentation",
+        "Feature Extraction",
+        "Object Detection",
+        "Classification"
+      ],
+      stages: [
+        "Image acquisition",
+        "Preprocessing",
+        "Filtering",
+        "Feature extraction",
+        "Segmentation",
+        "Object detection",
+        "Classification"
+      ],
+      flashcards: [
+        {
+          q: "What is convolution in image processing?",
+          a: "Convolution applies a kernel or filter over image pixels to produce a transformed image."
+        },
+        {
+          q: "What is image segmentation?",
+          a: "Image segmentation divides an image into meaningful regions or objects."
+        },
+        {
+          q: "What is feature extraction?",
+          a: "Feature extraction identifies useful visual characteristics that can help a system recognize or classify objects."
+        },
+        {
+          q: "What is object detection?",
+          a: "Object detection identifies objects and usually determines their locations using bounding boxes or similar representations."
+        },
+        {
+          q: "Why is preprocessing used?",
+          a: "Preprocessing reduces noise or improves image quality before further analysis."
+        }
+      ]
+    },
+
+    advanced: {
+      title: "Computer Vision",
+      summary:
+        "Advanced Computer Vision deals with extracting robust representations from visual data and solving tasks such as detection, segmentation, recognition and scene understanding using classical and deep learning methods.",
+      concepts: [
+        "Feature Representation",
+        "Convolutional Neural Networks",
+        "Object Detection",
+        "Semantic Segmentation",
+        "Instance Segmentation",
+        "Image Embeddings",
+        "Transfer Learning",
+        "Vision Transformers"
+      ],
+      stages: [
+        "Image acquisition",
+        "Normalization",
+        "Representation learning",
+        "Feature extraction",
+        "Model inference",
+        "Post-processing",
+        "Evaluation"
+      ],
+      flashcards: [
+        {
+          q: "What is a CNN?",
+          a: "A Convolutional Neural Network is a neural network architecture designed to learn spatial patterns from data such as images."
+        },
+        {
+          q: "What is transfer learning?",
+          a: "Transfer learning reuses knowledge learned by a model on one task or dataset to help solve another related task."
+        },
+        {
+          q: "What is semantic segmentation?",
+          a: "Semantic segmentation assigns a class label to each pixel in an image."
+        },
+        {
+          q: "What is instance segmentation?",
+          a: "Instance segmentation identifies individual object instances and assigns pixel-level regions to each instance."
+        },
+        {
+          q: "What are image embeddings?",
+          a: "Image embeddings are numerical representations that capture useful visual information in a lower-dimensional feature space."
+        }
+      ]
+    }
+
+  },
+
+  "python": {
+
+    beginner: {
+      title: "Python",
+      summary:
+        "Python is a high-level, interpreted programming language known for its simple syntax and wide range of applications.",
+      concepts: [
+        "Variables",
+        "Data Types",
+        "Operators",
+        "Conditions",
+        "Loops",
+        "Functions",
+        "Lists"
+      ],
+      stages: [
+        "Write code",
+        "Run the program",
+        "Check the output",
+        "Find errors",
+        "Improve the program"
+      ],
+      flashcards: [
+        {
+          q: "What is Python?",
+          a: "Python is a high-level, interpreted programming language known for readable syntax."
+        },
+        {
+          q: "What is a variable?",
+          a: "A variable is a name used to store or refer to a value."
+        },
+        {
+          q: "What is a list?",
+          a: "A list is an ordered, mutable collection of values in Python."
+        },
+        {
+          q: "What is a function?",
+          a: "A function is a reusable block of code designed to perform a specific task."
+        },
+        {
+          q: "What is a loop?",
+          a: "A loop repeatedly executes a block of code while a condition or sequence requires it."
+        }
+      ]
+    },
+
+    intermediate: {
+      title: "Python",
+      summary:
+        "Intermediate Python programming involves functions, modules, data structures, exception handling, file handling and object-oriented programming.",
+      concepts: [
+        "Functions",
+        "Modules",
+        "Dictionaries",
+        "Exception Handling",
+        "File Handling",
+        "Classes",
+        "Objects",
+        "List Comprehension"
+      ],
+      stages: [
+        "Design the logic",
+        "Create functions",
+        "Organize modules",
+        "Handle errors",
+        "Process data",
+        "Test the program"
+      ],
+      flashcards: [
+        {
+          q: "What is exception handling?",
+          a: "Exception handling allows a program to respond to runtime errors using mechanisms such as try and except."
+        },
+        {
+          q: "What is a dictionary?",
+          a: "A dictionary stores data as key-value pairs."
+        },
+        {
+          q: "What is a class?",
+          a: "A class is a blueprint used to create objects with attributes and methods."
+        },
+        {
+          q: "What is a module?",
+          a: "A module is a Python file containing reusable code such as functions, classes or variables."
+        },
+        {
+          q: "What is list comprehension?",
+          a: "List comprehension provides a concise way to create lists using an expression and iteration."
+        }
+      ]
+    },
+
+    advanced: {
+      title: "Python",
+      summary:
+        "Advanced Python includes object-oriented design, decorators, generators, iterators, context managers, concurrency and efficient data processing.",
+      concepts: [
+        "Decorators",
+        "Generators",
+        "Iterators",
+        "Context Managers",
+        "Inheritance",
+        "Polymorphism",
+        "Concurrency",
+        "Memory Management"
+      ],
+      stages: [
+        "Design architecture",
+        "Build reusable components",
+        "Optimize execution",
+        "Handle resources",
+        "Test and profile",
+        "Deploy"
+      ],
+      flashcards: [
+        {
+          q: "What is a decorator?",
+          a: "A decorator is a callable that modifies or extends the behavior of another function or class."
+        },
+        {
+          q: "What is a generator?",
+          a: "A generator produces values lazily, typically using yield, instead of creating the entire sequence at once."
+        },
+        {
+          q: "What is polymorphism?",
+          a: "Polymorphism allows different object types to provide a common interface or behavior."
+        },
+        {
+          q: "What is a context manager?",
+          a: "A context manager controls setup and cleanup around a block of code, commonly used with the with statement."
+        },
+        {
+          q: "Why are generators useful?",
+          a: "Generators can reduce memory usage by producing values one at a time instead of storing a complete sequence."
+        }
+      ]
+    }
+
+  }
 
 };
 
 
-/* =====================================================
-   HTML ELEMENTS
-===================================================== */
+/* =========================================================
+   GENERIC TOPIC GENERATOR
+========================================================= */
 
-const generateBtn =
-    document.getElementById("generateBtn");
+function makeGenericPack(topic, level) {
 
-const topicInput =
-    document.getElementById("topic");
+  const title = topic.trim() || "Your Topic";
 
-const difficultyInput =
-    document.getElementById("difficulty");
+  const concepts = [
+    `${title} — basic idea`,
+    `${title} — important terms`,
+    `${title} — main components`,
+    `${title} — applications`,
+    `${title} — advantages`,
+    `${title} — limitations`
+  ];
 
-const summaryContent =
-    document.getElementById("summaryContent");
+  const summary =
+    `${title} is an important topic that can be understood by identifying its basic definition, major concepts, components, applications, advantages and limitations. ` +
+    `At the ${level} level, focus on understanding the relationships between the important ideas and how they are applied.`;
 
-const flashcard =
-    document.getElementById("flashcard");
+  const stages = [
+    `Understand the definition of ${title}`,
+    `Identify the important concepts`,
+    `Study the main components`,
+    `Understand practical applications`,
+    `Review advantages and limitations`,
+    `Test your understanding`
+  ];
 
-const cardQuestion =
-    document.getElementById("cardQuestion");
+  const flashcards = [
+    {
+      q: `What is ${title}?`,
+      a: `${title} can be studied by understanding its definition, important concepts, components and practical applications.`
+    },
+    {
+      q: `What are the important concepts in ${title}?`,
+      a: `The important concepts include its basic idea, terminology, components, applications, advantages and limitations.`
+    },
+    {
+      q: `What are the applications of ${title}?`,
+      a: `${title} can be applied in different real-world or academic situations depending on its specific domain.`
+    },
+    {
+      q: `What are the advantages of ${title}?`,
+      a: `The advantages depend on the specific application, but generally include improved understanding, efficiency or problem solving.`
+    },
+    {
+      q: `What are the limitations of ${title}?`,
+      a: `The limitations depend on the context and may include complexity, resources, assumptions or practical constraints.`
+    }
+  ];
 
-const cardAnswer =
-    document.getElementById("cardAnswer");
-
-const prevCard =
-    document.getElementById("prevCard");
-
-const flipCard =
-    document.getElementById("flipCard");
-
-const nextCard =
-    document.getElementById("nextCard");
-
-const cardProgress =
-    document.getElementById("cardProgress");
-
-const themeBtn =
-    document.getElementById("themeBtn");
-
-
-/* =====================================================
-   FLASHCARD VARIABLES
-===================================================== */
-
-let currentFlashcards = [];
-
-let currentCardIndex = 0;
-
-
-/* =====================================================
-   GENERATE STUDY MATERIAL
-===================================================== */
-
-generateBtn.addEventListener("click", function () {
-
-    const topic =
-        topicInput.value
-            .trim()
-            .toLowerCase();
-
-    const difficulty =
-        difficultyInput.value;
+  return {
+    title,
+    summary,
+    concepts,
+    stages,
+    flashcards
+  };
+}
 
 
-    /* Empty topic */
+/* =========================================================
+   SOURCE TABS
+========================================================= */
 
-    if (topic === "") {
+document.querySelectorAll(".source-tab").forEach(tab => {
 
-        alert("Please enter a topic.");
+  tab.addEventListener("click", () => {
 
-        return;
+    document.querySelectorAll(".source-tab")
+      .forEach(t => t.classList.remove("active"));
 
+    tab.classList.add("active");
+
+    state.source = tab.dataset.source;
+
+    document.querySelectorAll(".source-panel")
+      .forEach(panel => panel.classList.remove("active"));
+
+    const panel = $(`${state.source}Panel`);
+
+    if (panel) {
+      panel.classList.add("active");
     }
 
-
-    /* Topic doesn't exist */
-
-    if (!studyData[topic]) {
-
-        summaryContent.innerHTML = `
-
-            <div class="empty-state">
-
-                <div class="empty-icon">?</div>
-
-                <h3>Topic not available yet</h3>
-
-                <p>
-                    Try one of these topics:
-                </p>
-
-                <p>
-                    <strong>
-                        Machine Learning,
-                        Computer Vision,
-                        Python
-                    </strong>
-                </p>
-
-                <p>
-                    Later, Knowvia will use AI to generate
-                    material for any topic.
-                </p>
-
-            </div>
-
-        `;
-
-        currentFlashcards = [];
-
-        currentCardIndex = 0;
-
-        cardQuestion.textContent =
-            "No flashcards available.";
-
-        cardAnswer.textContent =
-            "Please enter a supported topic.";
-
-        cardProgress.textContent =
-            "Card 0 / 0";
-
-        return;
-
-    }
-
-
-    /* Get topic */
-
-    const topicData =
-        studyData[topic];
-
-
-    /* Get difficulty */
-
-    const levelData =
-        topicData[difficulty];
-
-
-    /* Display summary */
-
-    summaryContent.innerHTML =
-        levelData.summary;
-
-
-    /* Load flashcards */
-
-    currentFlashcards =
-        levelData.flashcards;
-
-
-    currentCardIndex = 0;
-
-
-    /* Show first card */
-
-    showFlashcard();
-
-
-    /* Remove flipped state */
-
-    flashcard.classList.remove("flipped");
-
-
-    /* Scroll to summary */
-
-    document
-        .getElementById("summary")
-        .scrollIntoView({
-
-            behavior: "smooth"
-
-        });
+  });
 
 });
 
 
-/* =====================================================
-   SHOW FLASHCARD
-===================================================== */
+/* =========================================================
+   THEME TOGGLE
+========================================================= */
 
-function showFlashcard() {
+if ($("themeBtn")) {
 
-    if (currentFlashcards.length === 0) {
+  $("themeBtn").addEventListener("click", () => {
 
-        cardQuestion.textContent =
-            "No flashcards available.";
+    document.body.classList.toggle("dark");
 
-        cardAnswer.textContent =
-            "Generate a topic first.";
+    $("themeBtn").textContent =
+      document.body.classList.contains("dark")
+        ? "☀"
+        : "☾";
 
-        cardProgress.textContent =
-            "Card 0 / 0";
-
-        return;
-
-    }
-
-
-    const currentCard =
-        currentFlashcards[currentCardIndex];
-
-
-    cardQuestion.textContent =
-        currentCard.question;
-
-
-    cardAnswer.textContent =
-        currentCard.answer;
-
-
-    cardProgress.textContent =
-        `Card ${currentCardIndex + 1} / ${currentFlashcards.length}`;
-
-
-    flashcard.classList.remove("flipped");
+  });
 
 }
 
 
-/* =====================================================
-   FLIP FLASHCARD
-===================================================== */
+/* =========================================================
+   PDF UPLOAD
+========================================================= */
 
-flipCard.addEventListener("click", function () {
+if ($("pdfInput")) {
 
-    if (currentFlashcards.length === 0) {
-        return;
+  $("pdfInput").addEventListener("change", async (event) => {
+
+    const file = event.target.files[0];
+
+    if (!file) return;
+
+    $("pdfInfo").textContent =
+      `Reading ${file.name}...`;
+
+    try {
+
+      const arrayBuffer = await file.arrayBuffer();
+
+      const pdf = await pdfjsLib
+        .getDocument({ data: arrayBuffer })
+        .promise;
+
+      let text = "";
+
+      for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
+
+        const page = await pdf.getPage(pageNo);
+
+        const content = await page.getTextContent();
+
+        const pageText = content.items
+          .map(item => item.str)
+          .join(" ");
+
+        text += pageText + "\n";
+
+      }
+
+      state.material = text.trim();
+
+      state.title =
+        file.name.replace(/\.[^/.]+$/, "");
+
+      state.extracted = true;
+
+      $("pdfInfo").textContent =
+        `✓ ${pdf.numPages} page(s) extracted successfully`;
+
+    } catch (error) {
+
+      console.error(error);
+
+      $("pdfInfo").textContent =
+        "Unable to read this PDF.";
+
     }
 
-    flashcard.classList.toggle("flipped");
+  });
 
-});
+}
 
 
-/* Click card */
+/* =========================================================
+   HANDWRITTEN IMAGE OCR
+========================================================= */
 
-flashcard.addEventListener("click", function () {
+if ($("imageInput")) {
 
-    if (currentFlashcards.length === 0) {
-        return;
+  $("imageInput").addEventListener("change", async (event) => {
+
+    const file = event.target.files[0];
+
+    if (!file) return;
+
+    if ($("imagePreview")) {
+
+      $("imagePreview").src =
+        URL.createObjectURL(file);
+
+      $("imagePreview").style.display =
+        "block";
+
     }
 
-    flashcard.classList.toggle("flipped");
+    $("statusMessage").textContent =
+      "Reading handwritten notes...";
 
-});
+    try {
 
+      const result = await Tesseract.recognize(
+        file,
+        "eng",
+        {
+          logger: info => {
 
-/* =====================================================
-   NEXT CARD
-===================================================== */
+            if (info.status === "recognizing text") {
 
-nextCard.addEventListener("click", function () {
+              const progress =
+                Math.round(info.progress * 100);
 
-    if (currentFlashcards.length === 0) {
-        return;
+              $("statusMessage").textContent =
+                `Reading handwriting... ${progress}%`;
+
+            }
+
+          }
+        }
+      );
+
+      state.material =
+        result.data.text.trim();
+
+      state.title =
+        file.name.replace(/\.[^/.]+$/, "");
+
+      state.extracted = true;
+
+      $("statusMessage").textContent =
+        "✓ Handwritten notes extracted successfully.";
+
+    } catch (error) {
+
+      console.error(error);
+
+      $("statusMessage").textContent =
+        "Unable to read the handwritten image.";
+
     }
 
+  });
 
-    currentCardIndex++;
+}
 
+
+/* =========================================================
+   MATERIAL EXTRACTION
+========================================================= */
+
+function extractConcepts(text) {
+
+  if (!text) return [];
+
+  const stopWords = new Set([
+
+    "the",
+    "and",
+    "for",
+    "that",
+    "this",
+    "with",
+    "from",
+    "are",
+    "was",
+    "were",
+    "have",
+    "has",
+    "into",
+    "about",
+    "which",
+    "their",
+    "there",
+    "these",
+    "those",
+    "using",
+    "used",
+    "also",
+    "can",
+    "will",
+    "such",
+    "than",
+    "then",
+    "they",
+    "them",
+    "its",
+    "our",
+    "your",
+    "you",
+    "not",
+    "but",
+    "between",
+    "each",
+    "more",
+    "other",
+    "some",
+    "very",
+    "when",
+    "where",
+    "how",
+    "what",
+    "why",
+    "who"
+  ]);
+
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(word =>
+      word.length > 3 &&
+      !stopWords.has(word)
+    );
+
+  const frequency = {};
+
+  words.forEach(word => {
+
+    frequency[word] =
+      (frequency[word] || 0) + 1;
+
+  });
+
+  return Object.entries(frequency)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(item => item[0]);
+}
+
+
+/* =========================================================
+   BUILD STUDY PACK FROM MATERIAL
+========================================================= */
+
+function buildFromMaterial(text) {
+
+  const cleanText =
+    text
+      .replace(/\s+/g, " ")
+      .trim();
+
+  if (!cleanText) {
+
+    return makeGenericPack(
+      "Your Notes",
+      state.difficulty
+    );
+
+  }
+
+  const sentences =
+    cleanText
+      .split(/(?<=[.!?])\s+/)
+      .filter(sentence =>
+        sentence.trim().length > 30
+      );
+
+  const concepts =
+    extractConcepts(cleanText);
+
+  const selectedSentences =
+    sentences.slice(0, 6);
+
+  const title =
+    state.title ||
+    concepts
+      .slice(0, 3)
+      .join(" ") ||
+    "Uploaded Material";
+
+  const flashcards = [];
+
+  concepts.slice(0, 5).forEach(concept => {
+
+    const related =
+      sentences.find(sentence =>
+        sentence.toLowerCase()
+          .includes(concept.toLowerCase())
+      );
+
+    flashcards.push({
+
+      q: `What is ${concept}?`,
+
+      a:
+        related ||
+        `${concept} is one of the important concepts identified in the uploaded material.`
+
+    });
+
+  });
+
+  while (flashcards.length < 5) {
+
+    const sentence =
+      selectedSentences[flashcards.length];
+
+    if (!sentence) break;
+
+    flashcards.push({
+
+      q: "What is an important point from the material?",
+
+      a: sentence
+
+    });
+
+  }
+
+  return {
+
+    title,
+
+    summary:
+      selectedSentences.length
+        ? selectedSentences.slice(0, 4).join(" ")
+        : cleanText.slice(0, 900),
+
+    concepts:
+      concepts.length
+        ? concepts
+        : ["Main idea", "Important point", "Application"],
+
+    stages: [
+      "Read the material",
+      "Identify the important concepts",
+      "Understand the main points",
+      "Review the examples",
+      "Test your understanding"
+    ],
+
+    flashcards
+
+  };
+
+}
+
+
+/* =========================================================
+   GET CURRENT STUDY PACK
+========================================================= */
+
+function getStudyPack() {
+
+  state.difficulty =
+    $("difficulty")
+      ? $("difficulty").value
+      : "beginner";
+
+  if (state.source === "notes") {
+
+    const notes =
+      $("notesInput")
+        ? $("notesInput").value.trim()
+        : "";
+
+    if (!notes) {
+
+      throw new Error(
+        "Please enter some notes first."
+      );
+
+    }
+
+    state.material = notes;
+
+    state.title = "My Notes";
+
+    return buildFromMaterial(notes);
+
+  }
+
+
+  if (
+    state.source === "image" ||
+    state.source === "pdf"
+  ) {
+
+    if (!state.material) {
+
+      throw new Error(
+        "Please upload and extract your material first."
+      );
+
+    }
+
+    return buildFromMaterial(
+      state.material
+    );
+
+  }
+
+
+  const topic =
+    $("topic")
+      ? $("topic").value.trim()
+      : "";
+
+  if (!topic) {
+
+    throw new Error(
+      "Please enter a topic first."
+    );
+
+  }
+
+  const key =
+    topic.toLowerCase();
+
+  if (
+    topicPacks[key] &&
+    topicPacks[key][state.difficulty]
+  ) {
+
+    return topicPacks[key][state.difficulty];
+
+  }
+
+  return makeGenericPack(
+    topic,
+    state.difficulty
+  );
+
+}
+
+
+/* =========================================================
+   GENERATE BUTTON
+========================================================= */
+
+if ($("generateBtn")) {
+
+  $("generateBtn").addEventListener(
+    "click",
+    () => {
+
+      try {
+
+        $("statusMessage").textContent =
+          "Generating your study material...";
+
+        const pack =
+          getStudyPack();
+
+        state.title =
+          pack.title;
+
+        state.flashcards =
+          pack.flashcards || [];
+
+        state.cardIndex = 0;
+
+        state.quiz = [];
+
+        state.quizIndex = 0;
+
+        state.score = 0;
+
+        state.answered = false;
+
+        state.wrongAnswers = [];
+
+        state.weakConcepts = [];
+
+        renderSummary(pack);
+
+        renderFlashcard();
+
+        buildQuiz(pack);
+
+        updateKnowledgeMap(pack);
+
+        updateStudyDNA();
+
+        $("statusMessage").textContent =
+          "✓ Study material generated successfully.";
+
+        document
+          .getElementById("summary")
+          ?.scrollIntoView({
+            behavior: "smooth"
+          });
+
+      } catch (error) {
+
+        $("statusMessage").textContent =
+          error.message;
+
+      }
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   SUMMARY
+========================================================= */
+
+function renderSummary(pack) {
+
+  if ($("summaryTitle")) {
+
+    $("summaryTitle").textContent =
+      pack.title;
+
+  }
+
+  if ($("summaryContent")) {
+
+    $("summaryContent").innerHTML = `
+
+      <p>${escapeHTML(pack.summary)}</p>
+
+      <h4>Important Concepts</h4>
+
+      <ul>
+
+        ${pack.concepts
+          .map(concept =>
+            `<li>${escapeHTML(concept)}</li>`
+          )
+          .join("")}
+
+      </ul>
+
+      <h4>Learning Stages</h4>
+
+      <ol>
+
+        ${pack.stages
+          .map(stage =>
+            `<li>${escapeHTML(stage)}</li>`
+          )
+          .join("")}
+
+      </ol>
+
+    `;
+
+  }
+
+  if ($("sourcePill")) {
+
+    $("sourcePill").textContent =
+      state.source === "topic"
+        ? "Topic"
+        : state.source === "notes"
+          ? "Typed Notes"
+          : state.source === "image"
+            ? "Handwritten Notes"
+            : "PDF";
+
+  }
+
+}
+
+
+/* =========================================================
+   FLASHCARDS
+========================================================= */
+
+function renderFlashcard() {
+
+  if (!state.flashcards.length) return;
+
+  const card =
+    state.flashcards[state.cardIndex];
+
+  $("cardQuestion").textContent =
+    card.q;
+
+  $("cardAnswer").textContent =
+    card.a;
+
+  $("cardProgress").textContent =
+    `${state.cardIndex + 1} / ${state.flashcards.length}`;
+
+  const flashcard =
+    $("flashcard");
+
+  if (flashcard) {
+
+    flashcard.classList.remove("flipped");
+
+  }
+
+}
+
+
+if ($("nextCard")) {
+
+  $("nextCard").addEventListener(
+    "click",
+    () => {
+
+      if (!state.flashcards.length)
+        return;
+
+      state.cardIndex =
+        (state.cardIndex + 1) %
+        state.flashcards.length;
+
+      renderFlashcard();
+
+    }
+  );
+
+}
+
+
+if ($("prevCard")) {
+
+  $("prevCard").addEventListener(
+    "click",
+    () => {
+
+      if (!state.flashcards.length)
+        return;
+
+      state.cardIndex =
+        (state.cardIndex - 1 +
+          state.flashcards.length) %
+        state.flashcards.length;
+
+      renderFlashcard();
+
+    }
+  );
+
+}
+
+
+if ($("flipCard")) {
+
+  $("flipCard").addEventListener(
+    "click",
+    () => {
+
+      $("flashcard")
+        ?.classList.toggle("flipped");
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   CONFIDENCE TRACKING
+========================================================= */
+
+document
+  .querySelectorAll("[data-confidence]")
+  .forEach(button => {
+
+    button.addEventListener(
+      "click",
+      () => {
+
+        const value =
+          Number(button.dataset.confidence);
+
+        state.confidenceData.push(value);
+
+        updateStudyDNA();
+
+      }
+    );
+
+  });
+
+
+/* =========================================================
+   QUIZ CREATION
+========================================================= */
+
+function buildQuiz(pack) {
+
+  const style =
+    $("quizStyle")
+      ? $("quizStyle").value
+      : "mixed";
+
+  state.quiz =
+    state.flashcards
+      .slice(0, 5)
+      .map((card, index) => {
+
+        let type = "mcq";
+
+        if (style === "short")
+          type = "short";
+
+        if (style === "exam")
+          type = "mcq";
+
+        if (style === "mixed") {
+
+          type =
+            index % 2 === 0
+              ? "mcq"
+              : "short";
+
+        }
+
+        return {
+          question: card.q,
+          answer: card.a,
+          concept:
+            pack.concepts[index] ||
+            `Concept ${index + 1}`,
+          type
+        };
+
+      });
+
+  state.quizIndex = 0;
+  state.score = 0;
+  state.answered = false;
+
+  renderQuiz();
+
+}
+
+
+/* =========================================================
+   QUIZ RENDER
+========================================================= */
+
+function renderQuiz() {
+
+  const container =
+    $("quizContainer");
+
+  if (!container) return;
+
+  if (!state.quiz.length) {
+
+    container.innerHTML =
+      "<p>Generate study material to start the quiz.</p>";
+
+    return;
+
+  }
+
+  if (state.quizIndex >= state.quiz.length) {
+
+    finishQuiz();
+
+    return;
+
+  }
+
+  const item =
+    state.quiz[state.quizIndex];
+
+  state.answered = false;
+
+  if (item.type === "short") {
+
+    container.innerHTML = `
+
+      <div class="quiz-question">
+
+        <span class="quiz-number">
+          Question ${state.quizIndex + 1}
+          of ${state.quiz.length}
+        </span>
+
+        <h3>
+          ${escapeHTML(item.question)}
+        </h3>
+
+        <textarea
+          id="shortAnswer"
+          placeholder="Type your answer..."
+        ></textarea>
+
+        <button
+          class="primary-btn"
+          id="submitShort"
+        >
+          Submit Answer
+        </button>
+
+      </div>
+
+    `;
+
+    $("submitShort")
+      .addEventListener(
+        "click",
+        () => {
+
+          const answer =
+            $("shortAnswer")
+              .value
+              .trim();
+
+          if (!answer) return;
+
+          checkShortAnswer(
+            answer,
+            item.answer,
+            item.concept
+          );
+
+        }
+      );
+
+    return;
+
+  }
+
+
+  const choices =
+    createChoices(
+      item.answer,
+      state.flashcards
+    );
+
+  container.innerHTML = `
+
+    <div class="quiz-question">
+
+      <span class="quiz-number">
+        Question ${state.quizIndex + 1}
+        of ${state.quiz.length}
+      </span>
+
+      <h3>
+        ${escapeHTML(item.question)}
+      </h3>
+
+      <div class="quiz-options">
+
+        ${choices.map((choice, index) => `
+
+          <button
+            class="quiz-option"
+            data-index="${index}"
+          >
+            ${escapeHTML(choice)}
+          </button>
+
+        `).join("")}
+
+      </div>
+
+    </div>
+
+  `;
+
+  container
+    .querySelectorAll(".quiz-option")
+    .forEach(button => {
+
+      button.addEventListener(
+        "click",
+        () => {
+
+          if (state.answered)
+            return;
+
+          state.answered = true;
+
+          const selected =
+            choices[
+              Number(button.dataset.index)
+            ];
+
+          checkAnswer(
+            selected,
+            item.answer,
+            item.concept
+          );
+
+        }
+      );
+
+    });
+
+}
+
+
+/* =========================================================
+   CREATE MCQ OPTIONS
+========================================================= */
+
+function createChoices(correct, cards) {
+
+  const choices = [correct];
+
+  cards.forEach(card => {
 
     if (
-        currentCardIndex >=
-        currentFlashcards.length
+      card.a !== correct &&
+      choices.length < 4
     ) {
 
-        currentCardIndex = 0;
+      choices.push(card.a);
 
     }
 
+  });
 
-    showFlashcard();
+  while (choices.length < 4) {
 
-});
+    choices.push(
+      "This option is not supported by the material."
+    );
+
+  }
+
+  return shuffle(choices);
+
+}
 
 
-/* =====================================================
-   PREVIOUS CARD
-===================================================== */
+/* =========================================================
+   CHECK MCQ
+========================================================= */
 
-prevCard.addEventListener("click", function () {
+function checkAnswer(
+  selected,
+  correct,
+  concept
+) {
 
-    if (currentFlashcards.length === 0) {
+  const container =
+    $("quizContainer");
+
+  const isCorrect =
+    selected === correct;
+
+  if (isCorrect) {
+
+    state.score++;
+
+  } else {
+
+    state.wrongAnswers.push({
+      concept,
+      selected,
+      correct
+    });
+
+  }
+
+  container
+    .querySelectorAll(".quiz-option")
+    .forEach(button => {
+
+      const value =
+        button.textContent.trim();
+
+      if (value === correct) {
+
+        button.classList.add("correct");
+
+      }
+
+      if (
+        value === selected &&
+        !isCorrect
+      ) {
+
+        button.classList.add("wrong");
+
+      }
+
+    });
+
+  setTimeout(
+    () => {
+
+      state.quizIndex++;
+
+      renderQuiz();
+
+    },
+    900
+  );
+
+}
+
+
+/* =========================================================
+   SHORT ANSWER CHECK
+========================================================= */
+
+function checkShortAnswer(
+  userAnswer,
+  correctAnswer,
+  concept
+) {
+
+  const similarity =
+    wordSimilarity(
+      userAnswer,
+      correctAnswer
+    );
+
+  const isCorrect =
+    similarity >= 0.35;
+
+  if (isCorrect) {
+
+    state.score++;
+
+  } else {
+
+    state.wrongAnswers.push({
+      concept,
+      selected: userAnswer,
+      correct: correctAnswer
+    });
+
+  }
+
+  const container =
+    $("quizContainer");
+
+  container.innerHTML += `
+
+    <div class="answer-feedback">
+
+      ${
+        isCorrect
+          ? "✓ Good answer!"
+          : "✗ Review this concept."
+      }
+
+      <p>
+        Correct idea:
+        ${escapeHTML(correctAnswer)}
+      </p>
+
+    </div>
+
+  `;
+
+  setTimeout(
+    () => {
+
+      state.quizIndex++;
+
+      renderQuiz();
+
+    },
+    1200
+  );
+
+}
+
+
+/* =========================================================
+   WORD SIMILARITY
+========================================================= */
+
+function wordSimilarity(a, b) {
+
+  const clean = text =>
+    new Set(
+      text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, "")
+        .split(/\s+/)
+        .filter(word =>
+          word.length > 2
+        )
+    );
+
+  const A = clean(a);
+  const B = clean(b);
+
+  if (!A.size || !B.size)
+    return 0;
+
+  let common = 0;
+
+  A.forEach(word => {
+
+    if (B.has(word))
+      common++;
+
+  });
+
+  return common /
+    Math.max(A.size, B.size);
+
+}
+
+
+/* =========================================================
+   FINISH QUIZ
+========================================================= */
+
+function finishQuiz() {
+
+  const total =
+    state.quiz.length;
+
+  const percentage =
+    total
+      ? Math.round(
+          (state.score / total) * 100
+        )
+      : 0;
+
+  state.weakConcepts =
+    state.wrongAnswers
+      .map(item => item.concept);
+
+  const uniqueWeak =
+    [...new Set(
+      state.weakConcepts
+    )];
+
+  const container =
+    $("quizContainer");
+
+  container.innerHTML = `
+
+    <div class="quiz-result">
+
+      <div class="score-circle">
+        ${percentage}%
+      </div>
+
+      <h3>
+        Quiz Complete
+      </h3>
+
+      <p>
+        You scored
+        <strong>
+          ${state.score}
+        </strong>
+        out of
+        <strong>
+          ${total}
+        </strong>.
+      </p>
+
+      ${
+        uniqueWeak.length
+          ? `
+            <div class="weak-result">
+
+              <strong>
+                Topics to review:
+              </strong>
+
+              <p>
+                ${uniqueWeak
+                  .map(escapeHTML)
+                  .join(", ")}
+              </p>
+
+            </div>
+          `
+          : `
+            <p>
+              Excellent! No major weak topics detected.
+            </p>
+          `
+      }
+
+      <button
+        class="primary-btn"
+        onclick="resetQuiz()"
+      >
+        Try Again
+      </button>
+
+    </div>
+
+  `;
+
+  updateWeakTopic();
+
+  updateStudyDNA();
+
+}
+
+
+/* =========================================================
+   RESET QUIZ
+========================================================= */
+
+function resetQuiz() {
+
+  state.quizIndex = 0;
+
+  state.score = 0;
+
+  state.wrongAnswers = [];
+
+  state.answered = false;
+
+  renderQuiz();
+
+}
+
+
+/* =========================================================
+   WEAK TOPIC DETECTOR
+========================================================= */
+
+function updateWeakTopic() {
+
+  if (!$("weakTopic"))
+    return;
+
+  if (!state.weakConcepts.length) {
+
+    $("weakTopic").innerHTML =
+      "<strong>No weak topic detected.</strong> Keep going!";
+
+    return;
+
+  }
+
+  const counts = {};
+
+  state.weakConcepts.forEach(
+    concept => {
+
+      counts[concept] =
+        (counts[concept] || 0) + 1;
+
+    }
+  );
+
+  const sorted =
+    Object.entries(counts)
+      .sort((a, b) =>
+        b[1] - a[1]
+      );
+
+  const strongestWeak =
+    sorted[0]?.[0] ||
+    "Review the material";
+
+  $("weakTopic").innerHTML = `
+
+    <strong>
+      Weakest area:
+    </strong>
+
+    <span>
+      ${escapeHTML(strongestWeak)}
+    </span>
+
+    <p>
+      Review this concept using the flashcards
+      before attempting the quiz again.
+    </p>
+
+  `;
+
+}
+
+
+/* =========================================================
+   RETRY WEAK TOPIC
+========================================================= */
+
+if ($("retryWeakBtn")) {
+
+  $("retryWeakBtn").addEventListener(
+    "click",
+    () => {
+
+      if (!state.weakConcepts.length) {
+
+        alert(
+          "No weak topics detected yet."
+        );
+
         return;
+
+      }
+
+      const weakCards =
+        state.flashcards.filter(card => {
+
+          return state.weakConcepts.some(
+            concept =>
+              card.q
+                .toLowerCase()
+                .includes(
+                  concept
+                    .toLowerCase()
+                )
+          );
+
+        });
+
+      if (weakCards.length) {
+
+        state.flashcards =
+          weakCards;
+
+        state.cardIndex = 0;
+
+        renderFlashcard();
+
+        document
+          .getElementById("flashcards")
+          ?.scrollIntoView({
+            behavior: "smooth"
+          });
+
+      } else {
+
+        alert(
+          "Review the highlighted weak concepts in your notes."
+        );
+
+      }
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   STUDY DNA
+========================================================= */
+
+function updateStudyDNA() {
+
+  if (!$("dnaText"))
+    return;
+
+  const confidence =
+    state.confidenceData.length
+      ? average(state.confidenceData)
+      : 2;
+
+  const quizAccuracy =
+    state.quiz.length
+      ? state.score /
+        state.quiz.length
+      : 0;
+
+  const understanding =
+    Math.round(
+      quizAccuracy * 100
+    );
+
+  const recall =
+    Math.round(
+      (confidence / 3) * 100
+    );
+
+  const application =
+    state.wrongAnswers.length
+      ? Math.max(
+          20,
+          100 -
+          state.wrongAnswers.length * 15
+        )
+      : 85;
+
+  setBar(
+    "understandingBar",
+    understanding
+  );
+
+  setBar(
+    "recallBar",
+    recall
+  );
+
+  setBar(
+    "applicationBar",
+    application
+  );
+
+  let profile =
+    "Balanced Learner";
+
+  if (understanding >= 80)
+    profile = "Strong Performer";
+
+  if (
+    understanding < 60 &&
+    recall < 60
+  )
+    profile = "Foundation Builder";
+
+  if (
+    recall >= 80 &&
+    understanding < 60
+  )
+    profile = "Confidence-First Learner";
+
+  if (
+    understanding >= 80 &&
+    recall < 60
+  )
+    profile = "Practice-Driven Learner";
+
+  $("dnaText").innerHTML = `
+
+    <strong>
+      ${profile}
+    </strong>
+
+    <p>
+      Your current learning pattern is based on
+      quiz accuracy, flashcard confidence and
+      performance feedback.
+    </p>
+
+  `;
+
+}
+
+
+/* =========================================================
+   KNOWLEDGE MAP
+========================================================= */
+
+function updateKnowledgeMap(pack) {
+
+  if (!$("knowledgeMap"))
+    return;
+
+  $("knowledgeMap").innerHTML = `
+
+    <div class="knowledge-center">
+
+      ${escapeHTML(pack.title)}
+
+    </div>
+
+    <div class="knowledge-branches">
+
+      ${pack.concepts
+        .map(
+          concept => `
+
+            <div class="knowledge-node">
+
+              ${escapeHTML(concept)}
+
+            </div>
+
+          `
+        )
+        .join("")}
+
+    </div>
+
+  `;
+
+}
+
+
+/* =========================================================
+   TEACH ME
+========================================================= */
+
+if ($("teachBtn")) {
+
+  $("teachBtn").addEventListener(
+    "click",
+    () => {
+
+      openModal(`
+
+        <h2>
+          Teach Me: ${escapeHTML(state.title || "Your Topic")}
+        </h2>
+
+        <div class="teach-step">
+
+          <span>1</span>
+
+          <div>
+            <strong>Understand the idea</strong>
+            <p>
+              Start with the basic definition and
+              identify what problem the topic solves.
+            </p>
+          </div>
+
+        </div>
+
+        <div class="teach-step">
+
+          <span>2</span>
+
+          <div>
+            <strong>Break it into concepts</strong>
+            <p>
+              Learn each important concept separately
+              before connecting them together.
+            </p>
+          </div>
+
+        </div>
+
+        <div class="teach-step">
+
+          <span>3</span>
+
+          <div>
+            <strong>Apply the knowledge</strong>
+            <p>
+              Try examples, practical situations or
+              exam-style questions.
+            </p>
+          </div>
+
+        </div>
+
+        <div class="teach-step">
+
+          <span>4</span>
+
+          <div>
+            <strong>Explain it yourself</strong>
+            <p>
+              Close your notes and explain the topic
+              in your own words.
+            </p>
+          </div>
+
+        </div>
+
+      `);
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   STUDY SESSION
+========================================================= */
+
+if ($("sessionBtn")) {
+
+  $("sessionBtn").addEventListener(
+    "click",
+    () => {
+
+      openModal(`
+
+        <h2>
+          25-Minute Knowvia Study Session
+        </h2>
+
+        <div class="session-plan">
+
+          <div>
+            <strong>10 min</strong>
+            <span>Learn the summary</span>
+          </div>
+
+          <div>
+            <strong>5 min</strong>
+            <span>Review flashcards</span>
+          </div>
+
+          <div>
+            <strong>5 min</strong>
+            <span>Take the quiz</span>
+          </div>
+
+          <div>
+            <strong>3 min</strong>
+            <span>Review weak areas</span>
+          </div>
+
+          <div>
+            <strong>2 min</strong>
+            <span>Explain aloud</span>
+          </div>
+
+        </div>
+
+        <p>
+          The goal is active learning rather than
+          simply reading the material repeatedly.
+        </p>
+
+      `);
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   EXAM MODE
+========================================================= */
+
+if ($("examBtn")) {
+
+  $("examBtn").addEventListener(
+    "click",
+    () => {
+
+      const title =
+        state.title ||
+        "Your Topic";
+
+      openModal(`
+
+        <h2>
+          Exam Mode
+        </h2>
+
+        <p>
+          Practice ${escapeHTML(title)}
+          using different answer lengths.
+        </p>
+
+        <div class="exam-card">
+
+          <strong>2-Mark Question</strong>
+
+          <p>
+            Define ${escapeHTML(title)}
+            and state one important point.
+          </p>
+
+        </div>
+
+        <div class="exam-card">
+
+          <strong>5-Mark Question</strong>
+
+          <p>
+            Explain the main concepts of
+            ${escapeHTML(title)}
+            with suitable examples.
+          </p>
+
+        </div>
+
+        <div class="exam-card">
+
+          <strong>10-Mark Question</strong>
+
+          <p>
+            Explain ${escapeHTML(title)}
+            in detail, including its concepts,
+            stages, applications, advantages
+            and limitations.
+          </p>
+
+        </div>
+
+      `);
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   ASK MY NOTES
+========================================================= */
+
+if ($("notesAskBtn")) {
+
+  $("notesAskBtn").addEventListener(
+    "click",
+    () => {
+
+      openModal(`
+
+        <h2>
+          Ask My Notes
+        </h2>
+
+        <input
+          id="notesQuestion"
+          class="modal-input"
+          placeholder="Ask something from your notes..."
+        />
+
+        <button
+          class="primary-btn"
+          id="askNotesSubmit"
+        >
+          Ask
+        </button>
+
+        <div
+          id="notesAnswer"
+          class="notes-answer"
+        ></div>
+
+      `);
+
+      $("askNotesSubmit")
+        .addEventListener(
+          "click",
+          askNotes
+        );
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   ASK NOTES FUNCTION
+========================================================= */
+
+function askNotes() {
+
+  const question =
+    $("notesQuestion")
+      ?.value
+      .trim();
+
+  if (!question) return;
+
+  const text =
+    state.material ||
+    $("notesInput")?.value ||
+    "";
+
+  if (!text) {
+
+    $("notesAnswer").innerHTML =
+      "<p>No notes are available yet.</p>";
+
+    return;
+
+  }
+
+  const words =
+    question
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(word =>
+        word.length > 3
+      );
+
+  const sentences =
+    text
+      .replace(/\s+/g, " ")
+      .split(/(?<=[.!?])\s+/);
+
+  const matches =
+    sentences
+      .filter(sentence => {
+
+        const lower =
+          sentence.toLowerCase();
+
+        return words.some(word =>
+          lower.includes(word)
+        );
+
+      })
+      .slice(0, 4);
+
+  if (!matches.length) {
+
+    $("notesAnswer").innerHTML = `
+
+      <p>
+        I couldn't find a closely matching
+        sentence in the uploaded material.
+      </p>
+
+    `;
+
+    return;
+
+  }
+
+  $("notesAnswer").innerHTML = `
+
+    <strong>
+      Relevant information from your notes:
+    </strong>
+
+    <ul>
+
+      ${matches
+        .map(
+          sentence =>
+            `<li>${escapeHTML(sentence)}</li>`
+        )
+        .join("")}
+
+    </ul>
+
+  `;
+
+}
+
+
+/* =========================================================
+   MODAL
+========================================================= */
+
+function openModal(content) {
+
+  if (!$("modal"))
+    return;
+
+  $("modalContent").innerHTML =
+    content;
+
+  $("modal").classList.add("show");
+
+}
+
+
+if ($("modalClose")) {
+
+  $("modalClose").addEventListener(
+    "click",
+    () => {
+
+      $("modal").classList.remove(
+        "show"
+      );
+
+    }
+  );
+
+}
+
+
+if ($("modal")) {
+
+  $("modal").addEventListener(
+    "click",
+    event => {
+
+      if (
+        event.target === $("modal")
+      ) {
+
+        $("modal").classList.remove(
+          "show"
+        );
+
+      }
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   TOAST
+========================================================= */
+
+function showToast(message) {
+
+  if (!$("toast"))
+    return;
+
+  $("toast").textContent =
+    message;
+
+  $("toast").classList.add("show");
+
+  setTimeout(
+    () => {
+
+      $("toast").classList.remove(
+        "show"
+      );
+
+    },
+    2200
+  );
+
+}
+
+
+/* =========================================================
+   UTILITIES
+========================================================= */
+
+function shuffle(array) {
+
+  const copy =
+    [...array];
+
+  for (
+    let i = copy.length - 1;
+    i > 0;
+    i--
+  ) {
+
+    const j =
+      Math.floor(
+        Math.random() *
+        (i + 1)
+      );
+
+    [
+      copy[i],
+      copy[j]
+    ] =
+    [
+      copy[j],
+      copy[i]
+    ];
+
+  }
+
+  return copy;
+
+}
+
+
+function average(values) {
+
+  if (!values.length)
+    return 0;
+
+  return values.reduce(
+    (sum, value) =>
+      sum + value,
+    0
+  ) / values.length;
+
+}
+
+
+function setBar(id, percentage) {
+
+  const element =
+    $(id);
+
+  if (!element)
+    return;
+
+  element.style.width =
+    `${Math.max(
+      0,
+      Math.min(
+        100,
+        percentage
+      )
+    )}%`;
+
+}
+
+
+function escapeHTML(value) {
+
+  return String(value)
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&#039;"
+    );
+
+}
+
+
+/* =========================================================
+   INITIAL STATE
+========================================================= */
+
+document.addEventListener(
+  "DOMContentLoaded",
+  () => {
+
+    if ($("statusMessage")) {
+
+      $("statusMessage").textContent =
+        "Choose a topic or upload your study material.";
+
     }
 
+    if ($("topic")) {
 
-    currentCardIndex--;
+      $("topic").addEventListener(
+        "keydown",
+        event => {
 
+          if (
+            event.key === "Enter"
+          ) {
 
-    if (currentCardIndex < 0) {
+            event.preventDefault();
 
-        currentCardIndex =
-            currentFlashcards.length - 1;
+            $("generateBtn")
+              ?.click();
 
-    }
+          }
 
-
-    showFlashcard();
-
-});
-
-
-/* =====================================================
-   DARK MODE
-===================================================== */
-
-themeBtn.addEventListener("click", function () {
-
-    document.body.classList.toggle("dark-mode");
-
-
-    if (
-        document.body.classList.contains("dark-mode")
-    ) {
-
-        themeBtn.textContent = "☀";
-
-    } else {
-
-        themeBtn.textContent = "◐";
+        }
+      );
 
     }
 
-});
+  }
+);
+
+
+/* =========================================================
+   EXPOSE FUNCTIONS
+========================================================= */
+
+window.resetQuiz =
+  resetQuiz;
+
+window.openModal =
+  openModal;
+
+window.showToast =
+  showToast;
