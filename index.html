@@ -1,571 +1,144 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>Knowvia | Learn Smarter</title>
-
-    <meta name="description"
-        content="Knowvia is an intelligent learning platform for summaries, flashcards and quizzes.">
-
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Knowvia | Learn Smarter</title>
+<meta name="description" content="Knowvia - an adaptive study workspace for summaries, flashcards, quizzes and exam preparation.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
 </head>
-
 <body>
+<header class="navbar">
+  <div class="nav-container">
+    <a class="logo" href="#home"><span class="logo-icon">K</span><span>Know<span class="accent">via</span></span></a>
+    <nav class="nav-links">
+      <a href="#home">Home</a><a href="#summary">Summary</a><a href="#flashcards">Flashcards</a><a href="#quiz">Quiz</a><a href="#insights">Insights</a>
+    </nav>
+    <button class="theme-btn" id="themeBtn" aria-label="Switch theme" title="Switch theme">☾</button>
+  </div>
+</header>
 
-    <!-- ================= NAVBAR ================= -->
+<main>
+<section class="hero" id="home">
+  <div class="hero-content">
+    <span class="hero-badge">✦ ADAPTIVE LEARNING WORKSPACE</span>
+    <h1>Learn smarter.<br><span>Remember better.</span></h1>
+    <p class="hero-description">Turn a topic, typed notes, an image of handwritten notes, or a PDF into a complete study session.</p>
 
-    <header class="navbar">
+    <div class="study-box">
+      <div class="input-header">
+        <div><h2>Build your study session</h2><p>Choose one source. Knowvia turns it into learning material.</p></div>
+        <span class="sparkle">✦</span>
+      </div>
 
-        <div class="nav-container">
+      <div class="source-tabs">
+        <button class="source-tab active" data-source="topic">📚 Topic</button>
+        <button class="source-tab" data-source="notes">📝 Typed Notes</button>
+        <button class="source-tab" data-source="image">📷 Handwritten Notes</button>
+        <button class="source-tab" data-source="pdf">📄 PDF</button>
+      </div>
 
-            <a href="#" class="logo">
-                <span class="logo-icon">K</span>
-                <span class="logo-text">Know<span>via</span></span>
-            </a>
-
-            <nav class="nav-links">
-                <a href="#home">Home</a>
-                <a href="#summary">Summary</a>
-                <a href="#flashcards">Flashcards</a>
-                <a href="#quiz">Quiz</a>
-            </nav>
-
-            <button class="theme-btn" id="themeBtn" aria-label="Toggle dark mode">
-                ◐
-            </button>
-
+      <div class="source-panel active" id="topicPanel">
+        <div class="input-grid">
+          <label class="field"><span>Topic</span><input id="topic" type="text" placeholder="e.g. Machine Learning"></label>
+          <label class="field"><span>Difficulty</span><select id="difficulty"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option></select></label>
         </div>
-
-    </header>
-
-
-    <!-- ================= HERO ================= -->
-
-    <main>
-
-        <section class="hero" id="home">
-
-            <div class="hero-glow glow-one"></div>
-            <div class="hero-glow glow-two"></div>
-
-            <div class="hero-content">
-
-                <div class="hero-badge">
-                    ✦ Smart Learning • Simple & Powerful
-                </div>
-
-                <h1>
-                    Learn smarter.
-                    <br>
-                    <span>Remember better.</span>
-                </h1>
-
-                <p class="hero-description">
-                    Turn any topic into easy-to-understand summaries,
-                    interactive flashcards and engaging quizzes.
-                </p>
-
-                <!-- ================= STUDY INPUT ================= -->
-
-                <div class="study-box">
-
-                    <div class="input-header">
-                        <div>
-                            <h2>What do you want to learn?</h2>
-                            <p>Enter a topic and choose your learning level.</p>
-                        </div>
-
-                        <div class="sparkle">✦</div>
-                    </div>
-
-                    <div class="input-area">
-
-                        <div class="input-wrapper">
-
-                            <span class="input-icon">⌕</span>
-
-                            <input
-                                type="text"
-                                id="topic"
-                                placeholder="e.g. Machine Learning"
-                                autocomplete="off"
-                            >
-
-                        </div>
-
-                        <div class="select-wrapper">
-
-                            <select id="difficulty">
-
-                                <option value="beginner">
-                                    Beginner
-                                </option>
-
-                                <option value="intermediate">
-                                    Intermediate
-                                </option>
-
-                                <option value="advanced">
-                                    Advanced
-                                </option>
-
-                            </select>
-
-                        </div>
-
-                        <button id="generateBtn" class="generate-btn">
-                            <span>Generate</span>
-                            <span class="arrow">→</span>
-                        </button>
-
-                    </div>
-
-                    <div class="learning-levels">
-
-                        <span>
-                            <i class="level-dot beginner-dot"></i>
-                            Beginner
-                        </span>
-
-                        <span>
-                            <i class="level-dot intermediate-dot"></i>
-                            Intermediate
-                        </span>
-
-                        <span>
-                            <i class="level-dot advanced-dot"></i>
-                            Advanced
-                        </span>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-            <!-- Decorative learning illustration -->
-
-            <div class="hero-decoration">
-
-                <div class="floating-card card-one">
-                    <span>📖</span>
-                    <strong>Summary</strong>
-                    <small>Understand concepts</small>
-                </div>
-
-                <div class="floating-card card-two">
-                    <span>🧠</span>
-                    <strong>Remember</strong>
-                    <small>Use flashcards</small>
-                </div>
-
-                <div class="floating-card card-three">
-                    <span>🎯</span>
-                    <strong>Practice</strong>
-                    <small>Test your knowledge</small>
-                </div>
-
-                <div class="orbit-circle"></div>
-
-            </div>
-
-        </section>
-
-
-        <!-- ================= HOW IT WORKS ================= -->
-
-        <section class="how-section">
-
-            <div class="section-heading">
-
-                <span class="mini-label">HOW KNOWVIA WORKS</span>
-
-                <h2>
-                    From learning to mastery
-                    <span>in three steps.</span>
-                </h2>
-
-                <p>
-                    Knowvia turns complicated topics into a simple
-                    learning journey.
-                </p>
-
-            </div>
-
-
-            <div class="steps-container">
-
-                <div class="step-card">
-
-                    <div class="step-number">01</div>
-
-                    <div class="step-icon">📚</div>
-
-                    <h3>Learn</h3>
-
-                    <p>
-                        Get a clear and structured summary
-                        of the topic you want to understand.
-                    </p>
-
-                </div>
-
-
-                <div class="step-line"></div>
-
-
-                <div class="step-card">
-
-                    <div class="step-number">02</div>
-
-                    <div class="step-icon">🃏</div>
-
-                    <h3>Remember</h3>
-
-                    <p>
-                        Strengthen your memory using
-                        interactive question-and-answer flashcards.
-                    </p>
-
-                </div>
-
-
-                <div class="step-line"></div>
-
-
-                <div class="step-card">
-
-                    <div class="step-number">03</div>
-
-                    <div class="step-icon">🏆</div>
-
-                    <h3>Practice</h3>
-
-                    <p>
-                        Challenge yourself with quizzes
-                        and discover how much you've learned.
-                    </p>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-        <!-- ================= SUMMARY ================= -->
-
-        <section class="content-section summary-section" id="summary">
-
-            <div class="section-heading left-heading">
-
-                <div class="section-tag">
-                    <span>01</span>
-                    UNDERSTAND
-                </div>
-
-                <h2>
-                    Your learning
-                    <span>summary.</span>
-                </h2>
-
-                <p>
-                    Start with the important concepts before
-                    moving on to active recall.
-                </p>
-
-            </div>
-
-
-            <div class="summary-card">
-
-                <div class="summary-card-top">
-
-                    <div class="summary-icon">
-                        📖
-                    </div>
-
-                    <div>
-                        <span class="card-label">
-                            STUDY NOTES
-                        </span>
-
-                        <h3>Topic Summary</h3>
-                    </div>
-
-                </div>
-
-                <div id="summaryContent" class="summary-content">
-
-                    <div class="empty-state">
-
-                        <div class="empty-icon">✦</div>
-
-                        <h3>Your summary will appear here</h3>
-
-                        <p>
-                            Enter a topic above and click
-                            <strong>Generate</strong> to begin learning.
-                        </p>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-        <!-- ================= FLASHCARDS ================= -->
-
-        <section class="content-section flashcards-section" id="flashcards">
-
-            <div class="section-heading">
-
-                <div class="section-tag">
-                    <span>02</span>
-                    REMEMBER
-                </div>
-
-                <h2>
-                    Learn with
-                    <span>flashcards.</span>
-                </h2>
-
-                <p>
-                    Flip, review and strengthen your memory
-                    one concept at a time.
-                </p>
-
-            </div>
-
-
-            <div class="flashcard-area">
-
-                <div class="flashcard-instruction">
-                    <span>↻</span>
-                    Click the card or press Flip to reveal the answer
-                </div>
-
-
-                <div class="flashcard" id="flashcard">
-
-                    <div class="flashcard-inner">
-
-                        <!-- FRONT -->
-
-                        <div class="card-face card-front">
-
-                            <span class="card-type">
-                                QUESTION
-                            </span>
-
-                            <div
-                                id="cardQuestion"
-                                class="card-question"
-                            >
-                                Generate a topic to begin
-                            </div>
-
-                            <span class="flip-hint">
-                                Click to flip ↻
-                            </span>
-
-                        </div>
-
-
-                        <!-- BACK -->
-
-                        <div class="card-face card-back">
-
-                            <span class="card-type">
-                                ANSWER
-                            </span>
-
-                            <div
-                                id="cardAnswer"
-                                class="card-answer"
-                            >
-                                Your answer will appear here.
-                            </div>
-
-                            <span class="flip-hint">
-                                Click to flip ↻
-                            </span>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-
-                <!-- FLASHCARD CONTROLS -->
-
-                <div class="flashcard-controls">
-
-                    <button
-                        id="prevCard"
-                        class="control-btn"
-                    >
-                        ←
-                    </button>
-
-                    <span id="cardProgress">
-                        Card 0 / 0
-                    </span>
-
-                    <button
-                        id="flipCard"
-                        class="flip-btn"
-                    >
-                        ↻ Flip
-                    </button>
-
-                    <button
-                        id="nextCard"
-                        class="control-btn"
-                    >
-                        →
-                    </button>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-        <!-- ================= QUIZ ================= -->
-
-        <section class="content-section quiz-section" id="quiz">
-
-            <div class="section-heading">
-
-                <div class="section-tag">
-                    <span>03</span>
-                    PRACTICE
-                </div>
-
-                <h2>
-                    Test your
-                    <span>knowledge.</span>
-                </h2>
-
-                <p>
-                    Put your understanding to the test
-                    with an interactive quiz.
-                </p>
-
-            </div>
-
-
-            <div id="quizContainer" class="quiz-card">
-
-                <div class="quiz-empty">
-
-                    <div class="quiz-icon">
-                        🎯
-                    </div>
-
-                    <h3>Your quiz is waiting</h3>
-
-                    <p>
-                        Generate study material first.
-                        Your questions will appear here.
-                    </p>
-
-                    <a href="#home" class="quiz-start-link">
-                        Choose a topic ↑
-                    </a>
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-        <!-- ================= CTA ================= -->
-
-        <section class="final-cta">
-
-            <div class="cta-glow"></div>
-
-            <div class="cta-content">
-
-                <span>✦ KEEP LEARNING</span>
-
-                <h2>
-                    Knowledge becomes powerful
-                    <br>
-                    when you <em>remember it.</em>
-                </h2>
-
-                <p>
-                    Learn. Remember. Practice.
-                    That's the Knowvia way.
-                </p>
-
-                <a href="#home" class="cta-button">
-                    Start Learning
-                    <span>↑</span>
-                </a>
-
-            </div>
-
-        </section>
-
-    </main>
-
-
-    <!-- ================= FOOTER ================= -->
-
-    <footer>
-
-        <div class="footer-container">
-
-            <div class="footer-brand">
-
-                <a href="#" class="logo">
-                    <span class="logo-icon">K</span>
-                    <span class="logo-text">Know<span>via</span></span>
-                </a>
-
-                <p>
-                    Learn smarter. Remember better.
-                </p>
-
-            </div>
-
-
-            <div class="footer-links">
-
-                <a href="#home">Home</a>
-                <a href="#summary">Summary</a>
-                <a href="#flashcards">Flashcards</a>
-                <a href="#quiz">Quiz</a>
-
-            </div>
-
-
-            <div class="footer-copy">
-
-                © 2026 Knowvia
-
-            </div>
-
-        </div>
-
-    </footer>
-
-
-    <script src="app.js"></script>
-
+      </div>
+
+      <div class="source-panel" id="notesPanel">
+        <label class="field"><span>Paste your notes</span><textarea id="notesInput" rows="6" placeholder="Paste class notes here..."></textarea></label>
+      </div>
+
+      <div class="source-panel" id="imagePanel">
+        <label class="upload-box" for="imageInput"><span class="upload-icon">📷</span><strong>Upload handwritten notes</strong><small>PNG, JPG or WEBP • OCR extracts readable text in your browser</small><input id="imageInput" type="file" accept="image/*"></label>
+        <div id="imagePreview" class="file-preview hidden"></div>
+      </div>
+
+      <div class="source-panel" id="pdfPanel">
+        <label class="upload-box" for="pdfInput"><span class="upload-icon">📄</span><strong>Upload a PDF</strong><small>Text-based PDFs are extracted in your browser</small><input id="pdfInput" type="file" accept="application/pdf"></label>
+        <div id="pdfInfo" class="file-preview hidden"></div>
+      </div>
+
+      <div class="input-actions">
+        <label class="mini-field"><span>Question style</span><select id="quizStyle"><option value="mixed">Mixed Quiz</option><option value="mcq">MCQ Focus</option><option value="short">Short Answer</option><option value="exam">Exam Pattern</option></select></label>
+        <button id="generateBtn" class="generate-btn"><span>Generate Study Pack</span><span>→</span></button>
+      </div>
+      <div id="statusMessage" class="status-message" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
+<section class="quick-section">
+  <div class="section-heading">
+    <span class="mini-label">ONE WORKSPACE</span><h2>From material to <span>mastery.</span></h2>
+    <p>Knowvia keeps learning, practice and feedback together.</p>
+  </div>
+  <div class="feature-grid">
+    <article class="feature-card"><span>📖</span><h3>Understand</h3><p>Structured summaries, key concepts and stages.</p></article>
+    <article class="feature-card"><span>🃏</span><h3>Remember</h3><p>Interactive flashcards generated from the same material.</p></article>
+    <article class="feature-card"><span>🎯</span><h3>Practice</h3><p>Adaptive quizzes with confidence tracking.</p></article>
+    <article class="feature-card"><span>🧬</span><h3>Study DNA</h3><p>See strengths, weak areas and learning patterns.</p></article>
+  </div>
+</section>
+
+<section class="content-section" id="summary">
+  <div class="section-heading left"><span class="section-tag">01 • UNDERSTAND</span><h2>Your learning <span>summary.</span></h2><p>Start with the important ideas before active recall.</p></div>
+  <div class="summary-card">
+    <div class="card-top"><div class="summary-icon">📖</div><div><span class="card-label">STUDY NOTES</span><h3 id="summaryTitle">Topic Summary</h3></div><span class="source-pill" id="sourcePill">No source yet</span></div>
+    <div id="summaryContent" class="summary-content"><div class="empty-state"><div class="empty-icon">✦</div><h3>Your summary will appear here</h3><p>Choose a topic or upload study material and generate a pack.</p></div></div>
+  </div>
+</section>
+
+<section class="content-section flashcards-section" id="flashcards">
+  <div class="section-heading"><span class="section-tag">02 • REMEMBER</span><h2>Learn with <span>flashcards.</span></h2><p>Flip, rate your confidence and identify what needs another review.</p></div>
+  <div class="flashcard-area">
+    <div class="flashcard-instruction">↻ Click the card or use Flip to reveal the answer</div>
+    <div class="flashcard" id="flashcard"><div class="flashcard-inner">
+      <div class="card-face card-front"><span class="card-type">QUESTION</span><div id="cardQuestion" class="card-question">Generate a study pack to begin</div><span class="flip-hint">Click to flip ↻</span></div>
+      <div class="card-face card-back"><span class="card-type">ANSWER</span><div id="cardAnswer" class="card-answer">Your answer will appear here.</div><span class="flip-hint">Rate your confidence below</span></div>
+    </div></div>
+    <div class="confidence-row"><span>How well did you know it?</span><button data-confidence="1">😕 Not at all</button><button data-confidence="2">🤔 Almost</button><button data-confidence="3">😊 Knew it</button></div>
+    <div class="flashcard-controls"><button id="prevCard" class="control-btn">←</button><span id="cardProgress">Card 0 / 0</span><button id="flipCard" class="flip-btn">↻ Flip</button><button id="nextCard" class="control-btn">→</button></div>
+  </div>
+</section>
+
+<section class="content-section quiz-section" id="quiz">
+  <div class="section-heading"><span class="section-tag">03 • PRACTICE</span><h2>Test your <span>knowledge.</span></h2><p>Confidence + correctness helps Knowvia find misconceptions.</p></div>
+  <div id="quizContainer" class="quiz-card"><div class="quiz-empty"><div class="quiz-icon">🎯</div><h3>Your quiz is waiting</h3><p>Generate a study pack first.</p></div></div>
+</section>
+
+<section class="content-section insights-section" id="insights">
+  <div class="section-heading left"><span class="section-tag">04 • IMPROVE</span><h2>Your <span>Study DNA.</span></h2><p>Not just a score — understand how you learn.</p></div>
+  <div class="insight-grid">
+    <div class="insight-card main-insight"><div class="insight-icon">🧬</div><h3>Study DNA</h3><p id="dnaText">Complete a quiz to generate your learning profile.</p><div class="dna-bars"><div><span>Understanding</span><i><b id="understandingBar"></b></i></div><div><span>Recall</span><i><b id="recallBar"></b></i></div><div><span>Application</span><i><b id="applicationBar"></b></i></div></div></div>
+    <div class="insight-card"><div class="insight-icon">⚠️</div><h3>Weak Topic Detector</h3><p id="weakTopic">Your weak concepts will appear here after the quiz.</p><button id="retryWeakBtn" class="small-btn" disabled>Targeted Re-test</button></div>
+    <div class="insight-card"><div class="insight-icon">💡</div><h3>Explain My Mistake</h3><p id="mistakeText">Wrong answers will be explained here with a memory trick.</p></div>
+    <div class="insight-card"><div class="insight-icon">🗺️</div><h3>Knowledge Map</h3><div id="knowledgeMap" class="knowledge-map"><span class="map-node muted">Generate a pack</span></div></div>
+  </div>
+</section>
+
+<section class="tools-section">
+  <div class="section-heading"><span class="mini-label">EXAM & REVISION</span><h2>Your next <span>study move.</span></h2></div>
+  <div class="tool-grid">
+    <button class="tool-card" id="teachBtn"><span>👩‍🏫</span><strong>Teach Me</strong><small>Step-by-step explanation</small></button>
+    <button class="tool-card" id="sessionBtn"><span>⏱️</span><strong>Study Session</strong><small>10 min learn → 5 flashcards → quiz</small></button>
+    <button class="tool-card" id="examBtn"><span>🎓</span><strong>Exam Mode</strong><small>2, 5 and 10-mark questions</small></button>
+    <button class="tool-card" id="notesAskBtn"><span>🔍</span><strong>Ask My Notes</strong><small>Search your current material</small></button>
+  </div>
+</section>
+
+<section class="final-cta"><div><span>✦ KEEP LEARNING</span><h2>Knowledge becomes powerful<br>when you <em>remember it.</em></h2><p>Learn. Remember. Practice. Improve.</p><a href="#home" class="cta-button">Start Learning ↑</a></div></section>
+</main>
+
+<footer><div class="footer-container"><div><a class="logo" href="#home"><span class="logo-icon">K</span><span>Know<span class="accent">via</span></span></a><p>Learn smarter. Remember better.</p></div><div class="footer-links"><a href="#summary">Summary</a><a href="#flashcards">Flashcards</a><a href="#quiz">Quiz</a><a href="#insights">Study DNA</a></div><div>© 2026 Knowvia</div></div></footer>
+
+<div id="modal" class="modal hidden"><div class="modal-box"><button id="modalClose" class="modal-close">×</button><div id="modalContent"></div></div></div>
+<div id="toast" class="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="app.js"></script>
 </body>
-
 </html>
