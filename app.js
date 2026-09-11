@@ -2038,79 +2038,99 @@ function updateKnowledgeMap(pack) {
 
 if ($("teachBtn")) {
 
-  $("teachBtn").addEventListener(
-    "click",
-    () => {
+  $("teachBtn").addEventListener("click", async () => {
+
+    const topic = state.title || "the selected topic";
+    const material = state.material || "";
+
+    openModal(`
+      <h2>🤖 Teach Me: ${escapeHTML(topic)}</h2>
+
+      <div class="teach-loading">
+        <p>✨ AI is preparing a simple explanation...</p>
+      </div>
+    `);
+
+    try {
+
+      const prompt = `
+You are an expert but friendly study teacher.
+
+Teach the student about: "${topic}"
+
+Difficulty level: ${state.difficulty}
+
+Study material:
+${material || "No additional study material was provided."}
+
+Explain the topic in a very easy-to-understand way.
+
+Follow this structure:
+
+1. What is it?
+2. Why is it important?
+3. Main concepts
+4. How it works
+5. Simple real-world example
+6. Common mistake students make
+7. Exam tip
+8. One question for the student to answer
+
+Use simple language suitable for a B.Tech student.
+Use headings and bullet points.
+Do not make the explanation unnecessarily long.
+`;
+
+      const response = await fetch("/api/chat", {
+
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+          prompt: prompt
+        })
+
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "AI request failed");
+      }
 
       openModal(`
+        <h2>🤖 Teach Me: ${escapeHTML(topic)}</h2>
 
-        <h2>
-          Teach Me: ${escapeHTML(state.title || "Your Topic")}
-        </h2>
-
-        <div class="teach-step">
-
-          <span>1</span>
-
-          <div>
-            <strong>Understand the idea</strong>
-            <p>
-              Start with the basic definition and
-              identify what problem the topic solves.
-            </p>
-          </div>
-
+        <div class="ai-response">
+          ${formatAIResponse(data.answer)}
         </div>
+      `);
 
-        <div class="teach-step">
+    } catch (error) {
 
-          <span>2</span>
+      console.error(error);
 
-          <div>
-            <strong>Break it into concepts</strong>
-            <p>
-              Learn each important concept separately
-              before connecting them together.
-            </p>
-          </div>
+      openModal(`
+        <h2>⚠️ AI Connection Error</h2>
 
-        </div>
+        <p>
+          Knowvia could not connect to the AI service.
+        </p>
 
-        <div class="teach-step">
-
-          <span>3</span>
-
-          <div>
-            <strong>Apply the knowledge</strong>
-            <p>
-              Try examples, practical situations or
-              exam-style questions.
-            </p>
-          </div>
-
-        </div>
-
-        <div class="teach-step">
-
-          <span>4</span>
-
-          <div>
-            <strong>Explain it yourself</strong>
-            <p>
-              Close your notes and explain the topic
-              in your own words.
-            </p>
-          </div>
-
-        </div>
-
+        <p class="muted">
+          Please check your Vercel deployment and
+          OPENAI_API_KEY environment variable.
+        </p>
       `);
 
     }
-  );
+
+  });
 
 }
-
 
 /* =========================================================
    STUDY SESSION
