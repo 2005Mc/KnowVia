@@ -191,138 +191,291 @@ async function askGemini(prompt, apiKey, jsonMode = false) {
 ========================================================= */
 
 function studyPackPrompt(topic, material, difficulty, quizStyle) {
-  return `
-You are Knowvia, an AI study assistant.
+  const selectedTopic = String(topic || "").trim();
+  const sourceMaterial = String(material || "").trim();
+  const selectedDifficulty = String(difficulty || "beginner").trim();
+  const selectedStyle = String(quizStyle || "mixed").trim();
 
-Create a high-quality study pack for the student.
+  return `
+You are Knowvia, an AI-powered study assistant.
+
+Your job is to create a study pack for the EXACT topic or source material provided below.
+
+========================
+STUDENT INPUT
+========================
 
 TOPIC:
-${topic || "Not specified"}
+${selectedTopic || "No topic name provided"}
 
 SOURCE MATERIAL:
-${material || "No source material was provided. Use accurate general knowledge about the topic."}
+${sourceMaterial || "No additional source material provided."}
 
 DIFFICULTY:
-${difficulty}
+${selectedDifficulty}
 
 QUESTION STYLE:
-${quizStyle}
+${selectedStyle}
 
-IMPORTANT DIFFICULTY RULE:
-The difficulty level MUST genuinely affect the content.
+========================
+VERY IMPORTANT
+========================
 
-BEGINNER:
+The topic above is the student's CURRENT topic.
+
+You MUST generate content about that exact topic.
+
+NEVER use Photosynthesis, Machine Learning, Computer Vision, Cloud Computing, or any other example topic unless that is actually the student's requested topic.
+
+NEVER copy a previous response.
+
+NEVER return a fixed/sample answer.
+
+Every request must be generated from the CURRENT topic and CURRENT source material.
+
+If source material is provided, use it as the primary basis for the study pack.
+
+If no source material is provided, use your general knowledge about the CURRENT topic.
+
+Do not confuse the topic with an example from these instructions.
+
+========================
+DIFFICULTY
+========================
+
+The selected difficulty is:
+
+${selectedDifficulty}
+
+If difficulty is BEGINNER:
+- Assume the student is new to the topic.
+- Explain fundamentals clearly.
 - Use simple language.
-- Explain concepts from the basics.
-- Assume the student has little or no prior knowledge.
-- Use simple examples.
-- Avoid unnecessary technical complexity.
-- Questions should test basic understanding and recognition.
+- Define technical terms.
+- Give simple examples.
+- Avoid unnecessarily advanced details.
+- Quiz questions should mainly test basic understanding.
 
-INTERMEDIATE:
-- Assume the student already understands the basic definitions.
-- Explain relationships between concepts.
-- Include moderate technical terminology.
-- Include examples and small applications.
-- Questions should test understanding, comparison, reasoning and application.
+If difficulty is INTERMEDIATE:
+- Assume the student knows the fundamentals.
+- Explain concepts with more technical detail.
+- Include relationships between concepts.
+- Include comparisons and applications.
+- Quiz questions should test understanding and application.
 
-ADVANCED:
+If difficulty is ADVANCED:
 - Assume strong knowledge of the fundamentals.
-- Include deeper technical details.
-- Explain important relationships, edge cases and practical considerations.
-- Include more complex examples and applications.
-- Questions should require reasoning, analysis and problem solving.
+- Provide deeper technical details.
+- Include advanced concepts, edge cases and practical considerations.
+- Include analysis and application.
+- Quiz questions should require reasoning and deeper understanding.
 
-SUMMARY REQUIREMENT:
-The summary MUST NOT be a short paragraph.
+The three difficulty levels MUST produce noticeably different depth.
 
-Create a detailed, well-organized study summary.
+========================
+SUMMARY
+========================
 
-The summary should contain the following sections whenever they are relevant to the topic:
+Create a detailed study summary about:
+
+${selectedTopic || "the supplied study material"}
+
+The summary MUST NOT be a single short paragraph.
+
+Use the following sections whenever they are relevant:
 
 1. Introduction
+
+Explain what the topic is, why it is important, and where it is used.
+
 2. Definition / Meaning
+
+Give a clear and accurate definition.
+
 3. Key Concepts
+
+Explain the important concepts the student must understand.
+
 4. Types / Classification
+
+If the topic has different types, categories, models, methods or classifications, explain them clearly.
+
+If the topic genuinely has no meaningful types, do not invent them.
+
 5. Main Components
-6. How It Works / Working / Steps
+
+Explain the important components, elements, parts, tools, stages or entities involved.
+
+6. How It Works / Working
+
+Explain the process step by step when the topic involves a process, algorithm, system or mechanism.
+
 7. Important Characteristics
+
+Explain important properties, features or characteristics.
+
 8. Advantages
+
+Explain important advantages.
+
 9. Limitations / Disadvantages
+
+Explain important limitations, disadvantages or challenges.
+
 10. Applications
+
+Explain real-world uses and applications.
+
 11. Examples
+
+Give relevant examples directly related to the CURRENT topic.
+
 12. Important Points to Remember
+
+Give concise points useful for revision.
+
 13. Exam-Oriented Points
 
-Do NOT force a section if it genuinely does not apply to the topic.
+Give important points, comparisons, definitions, diagrams-to-remember, formulas or likely exam concepts when relevant.
 
-For technical subjects:
-- Include important terminology.
+Do NOT force irrelevant sections.
+
+Do NOT invent information merely to fill a section.
+
+For technical B.Tech topics:
+- Use proper technical terminology.
+- Explain difficult terms.
 - Explain processes step by step.
-- Include formulas only when relevant.
+- Include formulas when genuinely relevant.
 - Include comparisons when useful.
 - Include practical examples.
-- Make the explanation suitable for a B.Tech student.
+- Make the content useful for university examinations.
 
-For topics that have types, classifications or categories,
-explain each important type clearly.
+========================
+SOURCE MATERIAL RULE
+========================
 
-For topics involving a process or algorithm,
-explain the working step by step.
+If SOURCE MATERIAL is provided:
 
-For topics involving comparisons,
-clearly explain the differences.
+${sourceMaterial ? "Use the supplied source material as the primary reference. Do not ignore it." : "No source material was supplied."}
 
-For BEGINNER level:
-Keep explanations simple but complete.
+Do not replace the supplied material with an unrelated topic.
 
-For INTERMEDIATE level:
-Give more depth, relationships and applications.
+If the source material contains specific terminology, preserve that terminology where appropriate.
 
-For ADVANCED level:
-Give deeper technical explanation, reasoning, edge cases and practical relevance.
+If the source material is incomplete, explain only what can reasonably be supported and supplement with relevant knowledge about the SAME topic.
 
-Do not write meaningless filler.
-Do not repeat the same information in different sections.
-Use clear headings and bullet points where appropriate.
+========================
+FLASHCARDS
+========================
 
-FLASHCARDS:
-Create exactly 10 useful flashcards.
-Each flashcard must have:
-- question
-- answer
+Create exactly 10 flashcards about the CURRENT topic.
 
-QUIZ:
-Create exactly 10 multiple-choice questions.
-
-Each question must contain:
-- question
-- exactly 4 options
-- correctAnswer (0, 1, 2, or 3)
-- explanation
-- topic
-
-The quiz difficulty must match the selected difficulty.
-
-QUESTION STYLE RULE:
-If the selected style is "mixed", create a mixture of conceptual, application, reasoning and exam-style questions appropriate to the difficulty.
-
-If the selected style is "quiz", focus mainly on MCQ-style testing.
-
-If the selected style is "short", create questions that require short written answers.
-
-If the selected style is "exam", make questions resemble university/examination questions.
-
-PRACTICE QUESTIONS:
-Create useful practice questions appropriate to the selected difficulty.
-
-EXAM QUESTIONS:
-Create useful exam-oriented questions appropriate to the selected difficulty.
-
-Return ONLY valid JSON in exactly this structure:
+Each flashcard must contain:
 
 {
-  "summary": "detailed study summary with headings and sections",
+  "question": "...",
+  "answer": "..."
+}
+
+Flashcards must test important concepts rather than trivial facts.
+
+========================
+QUIZ
+========================
+
+Create exactly 10 multiple-choice questions about the CURRENT topic.
+
+Every question must contain:
+
+{
+  "question": "...",
+  "options": [
+    "...",
+    "...",
+    "...",
+    "..."
+  ],
+  "correctAnswer": 0,
+  "explanation": "...",
+  "topic": "..."
+}
+
+Rules:
+
+- Exactly 4 options.
+- correctAnswer must be 0, 1, 2 or 3.
+- Only one option should be correct.
+- The explanation must explain why the answer is correct.
+- The topic field must contain the actual concept being tested.
+- Questions MUST be about the CURRENT topic.
+- Do not use questions from another topic.
+
+========================
+QUESTION STYLE
+========================
+
+Selected style:
+
+${selectedStyle}
+
+If style is "mixed":
+Use a mixture of conceptual, application, reasoning and exam-oriented questions.
+
+If style is "quiz":
+Focus mainly on MCQ-style knowledge and understanding.
+
+If style is "short":
+Create questions suitable for short written answers.
+
+If style is "exam":
+Make questions resemble university/examination questions.
+
+========================
+PRACTICE QUESTIONS
+========================
+
+Create useful practice questions about the CURRENT topic.
+
+They must match the selected difficulty.
+
+========================
+EXAM QUESTIONS
+========================
+
+Create useful exam-oriented questions about the CURRENT topic.
+
+They must match the selected difficulty.
+
+========================
+FINAL CHECK BEFORE ANSWERING
+========================
+
+Before returning the response, verify:
+
+1. Is every section about the CURRENT topic?
+2. Did I accidentally use Photosynthesis as an example topic?
+3. Did I accidentally use another unrelated topic?
+4. Are the flashcards about the CURRENT topic?
+5. Are all 10 quiz questions about the CURRENT topic?
+6. Are the practice questions about the CURRENT topic?
+7. Are the exam questions about the CURRENT topic?
+8. Does the difficulty match ${selectedDifficulty}?
+9. Did I use the supplied source material when available?
+10. Is the summary detailed enough for a B.Tech student?
+
+If any answer is NO, correct it before returning the response.
+
+========================
+OUTPUT
+========================
+
+Return ONLY valid JSON.
+
+Use exactly this structure:
+
+{
+  "summary": "Detailed study summary with clearly labeled sections.",
   "flashcards": [
     {
       "question": "...",
