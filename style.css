@@ -1127,3 +1127,37 @@ body.dark footer {
     padding: 20px;
   }
 }
+/* =========================================================
+   FORMATTED AI CONTENT
+   Keeps bullet symbol and text on the same line
+========================================================= */
+
+.formatted-content {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.formatted-bullet {
+  display: block;
+  margin: 8px 0;
+  padding-left: 0;
+  line-height: 1.7;
+}
+
+.formatted-number {
+  display: block;
+  margin: 8px 0;
+  line-height: 1.7;
+}
+
+
+/* Make sure dark mode also looks clean */
+
+body.dark .formatted-content {
+  color: inherit;
+}
+
+body.dark .formatted-bullet,
+body.dark .formatted-number {
+  color: inherit;
+}
