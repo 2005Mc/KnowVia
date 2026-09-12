@@ -1134,139 +1134,259 @@ function setProgress(bar, text, value) {
 /* =========================================================
    STUDY DNA
 ========================================================= */
-
-studyDnaBtn?.addEventListener(
-  "click",
-  generateStudyDNA
-);
-
-
-async function generateStudyDNA() {
-
-  if (!state.quiz.length) {
-
-    studyDnaContent.innerHTML = `
-      <p class="empty-state">
-        Generate a study pack and complete the quiz first.
-      </p>
-    `;
-
+function analyzeStudyDNA() {
+  if (!state.quiz || state.quiz.length === 0) {
+    showFeatureOutput(
+      "Study DNA",
+      "Generate and complete a quiz first. Your Study DNA is created from your quiz performance."
+    );
     return;
   }
 
+  const total = state.quiz.length;
 
-  studyDnaBtn.disabled = true;
+  let correct = 0;
+  let attempted = 0;
+  let skipped = 0;
 
-  studyDnaBtn.textContent =
-    "Analyzing...";
+  const topicStats = {};
 
+  state.quiz.forEach((question, index) => {
+    const answer = state.quizAnswers[index];
 
-  try {
+    const topic =
+      question.topic ||
+      "General";
 
-    const results =
-      buildQuizResults();
+    if (!topicStats[topic]) {
+      topicStats[topic] = {
+        total: 0,
+        correct: 0,
+        attempted: 0
+      };
+    }
 
+    topicStats[topic].total++;
 
-    const data =
-      await callKnowviaAI({
+    if (
+      answer === null ||
+      answer === undefined ||
+      answer === ""
+    ) {
+      skipped++;
+      return;
+    }
 
-        task: "study_dna",
+    attempted++;
 
-        topic: state.title,
+    topicStats[topic].attempted++;
 
-        difficulty: state.difficulty,
+    if (Number(answer) === Number(question.correctAnswer)) {
+      correct++;
+      topicStats[topic].correct++;
+    }
+  });
 
-        quizResults: results
+  const accuracy =
+    attempted > 0
+      ? Math.round((correct / attempted) * 100)
+      : 0;
 
-      });
+  const completion =
+    total > 0
+      ? Math.round((attempted / total) * 100)
+      : 0;
 
+  let learningLevel = "";
+  let learningStyle = "";
+  let recommendation = "";
 
-    const dna =
-      extractJSON(data);
-
-
-    renderStudyDNA(dna);
-
-
-  } catch (error) {
-
-    studyDnaContent.innerHTML = `
-      <p>
-        ${escapeHTML(error.message)}
-      </p>
-    `;
-
-  } finally {
-
-    studyDnaBtn.disabled = false;
-
-    studyDnaBtn.textContent =
-      "Analyze My Study DNA";
+  if (accuracy >= 85) {
+    learningLevel = "Strong understanding";
+    recommendation =
+      "You have a strong grasp of the topic. Focus next on advanced applications, difficult questions and exam-style problems.";
+  } else if (accuracy >= 70) {
+    learningLevel = "Good understanding";
+    recommendation =
+      "Your fundamentals are good. Revise the concepts you missed and practice application-based questions.";
+  } else if (accuracy >= 50) {
+    learningLevel = "Developing understanding";
+    recommendation =
+      "You understand some important concepts, but your knowledge needs reinforcement. Review the summary and retry the weak areas.";
+  } else {
+    learningLevel = "Needs reinforcement";
+    recommendation =
+      "Start by revising the fundamentals and key concepts. Then attempt another quiz before moving to advanced questions.";
   }
-}
 
+  if (completion < 60) {
+    learningStyle =
+      "You tend to leave questions unanswered. Try attempting more questions so Knowvia can understand your learning pattern better.";
+  } else if (accuracy >= 80) {
+    learningStyle =
+      "You learn effectively through active recall and question-based practice.";
+  } else if (accuracy >= 60) {
+    learningStyle =
+      "You benefit from a combination of concept revision and active practice.";
+  } else {
+    learningStyle =
+      "You would benefit most from concept-first learning followed by repeated practice.";
+  }
 
-function renderStudyDNA(dna) {
+  const topicEntries = Object.entries(topicStats);
 
-  const strengths =
-    Array.isArray(dna.strengths)
-      ? dna.strengths
-      : [];
+  topicEntries.sort((a, b) => {
+    const accuracyA =
+      a[1].attempted > 0
+        ? a[1].correct / a[1].attempted
+        : 0;
 
-  const improvements =
-    Array.isArray(dna.improvements)
-      ? dna.improvements
-      : [];
+    const accuracyB =
+      b[1].attempted > 0
+        ? b[1].correct / b[1].attempted
+        : 0;
 
+    return accuracyA - accuracyB;
+  });
 
-  studyDnaContent.innerHTML = `
+  const weakTopics = topicEntries
+    .filter(([_, data]) => {
+      if (data.attempted === 0) return true;
 
-    <div class="study-dna-grid">
+      return (
+        data.correct / data.attempted < 0.7
+      );
+    })
+    .slice(0, 3);
 
-      <div class="dna-item">
-        <strong>Learning Profile</strong>
-        <span>
-          ${escapeHTML(dna.profile || "Not available")}
-        </span>
+  const strongTopics = [...topicEntries]
+    .sort((a, b) => {
+      const accuracyA =
+        a[1].attempted > 0
+          ? a[1].correct / a[1].attempted
+          : 0;
+
+      const accuracyB =
+        b[1].attempted > 0
+          ? b[1].correct / b[1].attempted
+          : 0;
+
+      return accuracyB - accuracyA;
+    })
+    .filter(([_, data]) => data.attempted > 0)
+    .slice(0, 3);
+
+  let weakHTML = "";
+
+  if (weakTopics.length > 0) {
+    weakHTML = weakTopics
+      .map(([topic, data]) => {
+        const topicAccuracy =
+          data.attempted > 0
+            ? Math.round(
+                (data.correct / data.attempted) * 100
+              )
+            : 0;
+
+        return `
+          <div class="dna-topic">
+            <strong>${escapeHTML(topic)}</strong>
+            <span>${topicAccuracy}% accuracy</span>
+          </div>
+        `;
+      })
+      .join("");
+  } else {
+    weakHTML = `
+      <div class="dna-empty">
+        No major weak topic was detected from this quiz.
       </div>
+    `;
+  }
 
-      <div class="dna-item">
-        <strong>Recall Pattern</strong>
-        <span>
-          ${escapeHTML(dna.recallPattern || "Not available")}
-        </span>
+  let strongHTML = "";
+
+  if (strongTopics.length > 0) {
+    strongHTML = strongTopics
+      .map(([topic, data]) => {
+        const topicAccuracy =
+          data.attempted > 0
+            ? Math.round(
+                (data.correct / data.attempted) * 100
+              )
+            : 0;
+
+        return `
+          <div class="dna-topic">
+            <strong>${escapeHTML(topic)}</strong>
+            <span>${topicAccuracy}% accuracy</span>
+          </div>
+        `;
+      })
+      .join("");
+  } else {
+    strongHTML = `
+      <div class="dna-empty">
+        Complete more questions to identify your strongest areas.
       </div>
+    `;
+  }
 
-      <div class="dna-item">
-        <strong>Strengths</strong>
-        <ul>
-          ${strengths.map(
-            item => `<li>${escapeHTML(item)}</li>`
-          ).join("")}
-        </ul>
-      </div>
-
-      <div class="dna-item">
-        <strong>Improve Next</strong>
-        <ul>
-          ${improvements.map(
-            item => `<li>${escapeHTML(item)}</li>`
-          ).join("")}
-        </ul>
-      </div>
-
+  const html = `
+    <div class="dna-header">
+      <h3>Your Study DNA</h3>
+      <p>Based on your actual performance in the current quiz.</p>
     </div>
 
-    <h4>Recommended Study Method</h4>
+    <div class="dna-stats">
+      <div class="dna-stat">
+        <strong>${accuracy}%</strong>
+        <span>Accuracy</span>
+      </div>
 
-    <p>
-      ${formatText(
-        dna.recommendation ||
-        "Keep practicing with active recall."
-      )}
-    </p>
+      <div class="dna-stat">
+        <strong>${correct}/${attempted}</strong>
+        <span>Correct</span>
+      </div>
 
+      <div class="dna-stat">
+        <strong>${completion}%</strong>
+        <span>Completed</span>
+      </div>
+
+      <div class="dna-stat">
+        <strong>${skipped}</strong>
+        <span>Skipped</span>
+      </div>
+    </div>
+
+    <div class="dna-section">
+      <h4>Learning Level</h4>
+      <p>${learningLevel}</p>
+    </div>
+
+    <div class="dna-section">
+      <h4>Your Learning Pattern</h4>
+      <p>${learningStyle}</p>
+    </div>
+
+    <div class="dna-section">
+      <h4>Strong Areas</h4>
+      ${strongHTML}
+    </div>
+
+    <div class="dna-section">
+      <h4>Areas That Need More Practice</h4>
+      ${weakHTML}
+    </div>
+
+    <div class="dna-section">
+      <h4>Recommended Next Step</h4>
+      <p>${recommendation}</p>
+    </div>
   `;
+
+  showFeatureOutput("Study DNA", html);
 }
 
 
