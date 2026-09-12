@@ -1,13 +1,13 @@
-/* =========================================================
-   KNOWVIA - APP.JS
-   AI Study Assistant
-   ========================================================= */
+// ============================================================
+// KNOWVIA - FRONTEND
+// Gemini API is called through /api/chat
+// Never put GEMINI_API_KEY in this file.
+// ============================================================
 
-const $ = (id) => document.getElementById(id);
 
-/* =========================================================
-   STATE
-   ========================================================= */
+// ============================================================
+// STATE
+// ============================================================
 
 const state = {
   source: "topic",
@@ -27,19 +27,30 @@ const state = {
   busy: false
 };
 
-/* =========================================================
-   DOM ELEMENTS
-   ========================================================= */
+
+// ============================================================
+// ELEMENTS
+// ============================================================
+
+const $ = (id) => document.getElementById(id);
+
+const sourceTabs = document.querySelectorAll(".source-tab");
+
+const topicPanel = $("topicPanel");
+const typedPanel = $("typedPanel");
+const handwrittenPanel = $("handwrittenPanel");
+const pdfPanel = $("pdfPanel");
 
 const topicInput = $("topic");
 const typedNotes = $("typedNotes");
 const handwrittenInput = $("handwrittenInput");
 const handwrittenStatus = $("handwrittenStatus");
+
 const pdfInput = $("pdfInput");
 const pdfStatus = $("pdfStatus");
 
-const difficultyInput = $("difficulty");
-const questionStyleInput = $("questionStyle");
+const difficultySelect = $("difficulty");
+const questionStyleSelect = $("questionStyle");
 
 const generateBtn = $("generateBtn");
 const generateStatus = $("generateStatus");
@@ -49,10 +60,15 @@ const summaryContent = $("summaryContent");
 const flashcard = $("flashcard");
 const cardQuestion = $("cardQuestion");
 const cardAnswer = $("cardAnswer");
+
 const prevCard = $("prevCard");
 const flipCard = $("flipCard");
 const nextCard = $("nextCard");
 const cardProgress = $("cardProgress");
+
+const confidenceButtons = document.querySelectorAll(
+  "[data-confidence]"
+);
 
 const quizContainer = $("quizContainer");
 
@@ -85,14 +101,212 @@ const featureOutput = $("featureOutput");
 
 const themeBtn = $("themeBtn");
 
-/* =========================================================
-   BASIC HELPERS
-   ========================================================= */
+
+// ============================================================
+// INITIAL SETUP
+// ============================================================
+
+document.addEventListener("DOMContentLoaded", () => {
+  setupSourceTabs();
+  setupTheme();
+  setupButtons();
+  setupKeyboardShortcuts();
+
+  updateSourcePanels();
+  updateFlashcardUI();
+  updateInsightsVisibility();
+});
+
+
+// ============================================================
+// SOURCE TABS
+// ============================================================
+
+function setupSourceTabs() {
+  sourceTabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const source = tab.dataset.source;
+
+      if (!source) return;
+
+      state.source = source;
+
+      sourceTabs.forEach((item) => {
+        item.classList.toggle(
+          "active",
+          item.dataset.source === source
+        );
+      });
+
+      updateSourcePanels();
+    });
+  });
+}
+
+
+function updateSourcePanels() {
+  if (topicPanel) {
+    topicPanel.style.display =
+      state.source === "topic" ? "" : "none";
+  }
+
+  if (typedPanel) {
+    typedPanel.style.display =
+      state.source === "typed" ? "" : "none";
+  }
+
+  if (handwrittenPanel) {
+    handwrittenPanel.style.display =
+      state.source === "handwritten" ? "" : "none";
+  }
+
+  if (pdfPanel) {
+    pdfPanel.style.display =
+      state.source === "pdf" ? "" : "none";
+  }
+}
+
+
+// ============================================================
+// THEME
+// ============================================================
+
+function setupTheme() {
+  if (!themeBtn) return;
+
+  themeBtn.addEventListener("click", () => {
+    document.body.classList.toggle("dark-mode");
+
+    const dark =
+      document.body.classList.contains("dark-mode");
+
+    themeBtn.textContent = dark ? "☀️" : "🌙";
+  });
+}
+
+
+// ============================================================
+// BUTTON SETUP
+// ============================================================
+
+function setupButtons() {
+
+  if (generateBtn) {
+    generateBtn.addEventListener(
+      "click",
+      generateStudyPack
+    );
+  }
+
+  if (prevCard) {
+    prevCard.addEventListener(
+      "click",
+      showPreviousCard
+    );
+  }
+
+  if (nextCard) {
+    nextCard.addEventListener(
+      "click",
+      showNextCard
+    );
+  }
+
+  if (flipCard) {
+    flipCard.addEventListener(
+      "click",
+      flipCurrentCard
+    );
+  }
+
+  confidenceButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const confidence = button.dataset.confidence;
+
+      if (!confidence) return;
+
+      button.classList.add("selected");
+
+      setTimeout(() => {
+        button.classList.remove("selected");
+      }, 700);
+    });
+  });
+
+  if (weakTopicsBtn) {
+    weakTopicsBtn.addEventListener(
+      "click",
+      targetedRetest
+    );
+  }
+
+  if (explainMistakeBtn) {
+    explainMistakeBtn.addEventListener(
+      "click",
+      explainMistake
+    );
+  }
+
+  if (knowledgeMapBtn) {
+    knowledgeMapBtn.addEventListener(
+      "click",
+      generateKnowledgeMap
+    );
+  }
+
+  if (teachBtn) {
+    teachBtn.addEventListener(
+      "click",
+      () => runFeature("teach")
+    );
+  }
+
+  if (studySessionBtn) {
+    studySessionBtn.addEventListener(
+      "click",
+      () => runFeature("study_session")
+    );
+  }
+
+  if (examModeBtn) {
+    examModeBtn.addEventListener(
+      "click",
+      () => runFeature("exam")
+    );
+  }
+
+  if (askNotesBtn) {
+    askNotesBtn.addEventListener(
+      "click",
+      askMyNotes
+    );
+  }
+
+  if (pdfInput) {
+    pdfInput.addEventListener(
+      "change",
+      handlePDFUpload
+    );
+  }
+
+  if (handwrittenInput) {
+    handwrittenInput.addEventListener(
+      "change",
+      handleHandwrittenUpload
+    );
+  }
+}
+
+
+// ============================================================
+// STATUS
+// ============================================================
 
 function setStatus(message, type = "") {
   if (!generateStatus) return;
 
   generateStatus.textContent = message;
+
   generateStatus.className = "status";
 
   if (type) {
@@ -100,89 +314,80 @@ function setStatus(message, type = "") {
   }
 }
 
-function setElementStatus(element, message) {
-  if (!element) return;
-  element.textContent = message;
+
+function setFeatureStatus(message) {
+  if (!featureOutput) return;
+
+  featureOutput.innerHTML = `
+    <div class="feature-message">
+      ${escapeHTML(message)}
+    </div>
+  `;
 }
 
-function escapeHTML(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+// ============================================================
+// API CALL
+// ============================================================
 
-/* =========================================================
-   SOURCE TABS
-   ========================================================= */
+async function callKnowviaAI(payload) {
 
-document.querySelectorAll(".source-tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    const source = tab.dataset.source;
+  const response = await fetch("/api/chat", {
+    method: "POST",
 
-    if (!source) return;
+    headers: {
+      "Content-Type": "application/json"
+    },
 
-    state.source = source;
-
-    document.querySelectorAll(".source-tab").forEach((item) => {
-      item.classList.toggle("active", item === tab);
-    });
-
-    document.querySelectorAll(".source-panel").forEach((panel) => {
-      panel.classList.remove("active");
-    });
-
-    const panel = $(`${source}Panel`);
-
-    if (panel) {
-      panel.classList.add("active");
-    }
+    body: JSON.stringify(payload)
   });
-});
 
-/* =========================================================
-   THEME
-   ========================================================= */
+  let data = {};
 
-if (themeBtn) {
-  themeBtn.addEventListener("click", () => {
-    document.body.classList.toggle("dark-mode");
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error(
+      "The server returned an invalid response."
+    );
+  }
 
-    const dark = document.body.classList.contains("dark-mode");
+  if (!response.ok) {
+    throw new Error(
+      data.error ||
+      "AI request failed."
+    );
+  }
 
-    try {
-      document.documentElement.dataset.theme = dark ? "dark" : "light";
-    } catch (_) {}
+  /*
+    Gemini backend can return:
 
-    themeBtn.textContent = dark ? "☀️" : "🌙";
-  });
+    1. Normal text:
+       { result: "..." }
+
+    2. Compatibility text:
+       { answer: "..." }
+
+    3. Study-pack JSON directly:
+       { summary: "...", flashcards: [...], quiz: [...] }
+  */
+
+  return data;
 }
 
-/* =========================================================
-   READ MATERIAL
-   ========================================================= */
 
-function getTopicValue() {
-  return topicInput ? topicInput.value.trim() : "";
-}
-
-function getTypedNotes() {
-  return typedNotes ? typedNotes.value.trim() : "";
-}
+// ============================================================
+// MATERIAL COLLECTION
+// ============================================================
 
 function getCurrentMaterial() {
+
   if (state.source === "topic") {
-    return getTopicValue();
+    return "";
   }
 
   if (state.source === "typed") {
-    return getTypedNotes();
+    return textValue(typedNotes);
   }
 
   if (state.source === "handwritten") {
@@ -196,13 +401,15 @@ function getCurrentMaterial() {
   return "";
 }
 
-function getTitle() {
+
+function getCurrentTitle() {
+
   if (state.source === "topic") {
-    return getTopicValue() || "Study Topic";
+    return textValue(topicInput);
   }
 
   if (state.source === "typed") {
-    return "My Notes";
+    return "Typed Notes";
   }
 
   if (state.source === "handwritten") {
@@ -213,517 +420,49 @@ function getTitle() {
     return "PDF Notes";
   }
 
-  return "Study Material";
+  return "Knowvia Study Material";
 }
 
-/* =========================================================
-   IMAGE OCR
-   ========================================================= */
 
-let tesseractLoaded = false;
-
-async function loadTesseract() {
-  if (window.Tesseract) {
-    tesseractLoaded = true;
-    return window.Tesseract;
-  }
-
-  if (tesseractLoaded) {
-    return window.Tesseract;
-  }
-
-  await new Promise((resolve, reject) => {
-    const existing = document.querySelector(
-      'script[src*="tesseract"]'
-    );
-
-    if (existing) {
-      existing.addEventListener("load", resolve, { once: true });
-      existing.addEventListener("error", reject, { once: true });
-      return;
-    }
-
-    const script = document.createElement("script");
-
-    script.src =
-      "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
-
-    script.onload = resolve;
-    script.onerror = reject;
-
-    document.head.appendChild(script);
-  });
-
-  tesseractLoaded = true;
-
-  if (!window.Tesseract) {
-    throw new Error("OCR library could not be loaded.");
-  }
-
-  return window.Tesseract;
+function textValue(element) {
+  return element
+    ? String(element.value || "").trim()
+    : "";
 }
 
-async function performOCR(source, statusElement) {
-  try {
-    setElementStatus(statusElement, "Reading handwriting...");
 
-    const Tesseract = await loadTesseract();
-
-    const result = await Tesseract.recognize(source, "eng", {
-      logger: (info) => {
-        if (
-          info &&
-          info.status === "recognizing text" &&
-          typeof info.progress === "number"
-        ) {
-          const percent = Math.round(info.progress * 100);
-          setElementStatus(
-            statusElement,
-            `Reading handwriting... ${percent}%`
-          );
-        }
-      }
-    });
-
-    const text = result?.data?.text?.trim() || "";
-
-    if (!text) {
-      throw new Error("No readable text was found.");
-    }
-
-    state.material = text;
-
-    setElementStatus(
-      statusElement,
-      "✓ Handwritten notes converted to text."
-    );
-
-    return text;
-  } catch (error) {
-    console.error("OCR error:", error);
-
-    setElementStatus(
-      statusElement,
-      `Could not read the image: ${error.message}`
-    );
-
-    throw error;
-  }
-}
-
-if (handwrittenInput) {
-  handwrittenInput.addEventListener("change", async () => {
-    const file = handwrittenInput.files?.[0];
-
-    if (!file) return;
-
-    try {
-      await performOCR(file, handwrittenStatus);
-    } catch (_) {
-      state.material = "";
-    }
-  });
-}
-
-/* =========================================================
-   PDF.JS
-   ========================================================= */
-
-let pdfJsLoaded = false;
-
-async function loadPDFJS() {
-  if (window.pdfjsLib) {
-    pdfJsLoaded = true;
-    return window.pdfjsLib;
-  }
-
-  if (pdfJsLoaded) {
-    return window.pdfjsLib;
-  }
-
-  await new Promise((resolve, reject) => {
-    const existing = document.querySelector(
-      'script[src*="pdf.min.js"]'
-    );
-
-    if (existing) {
-      existing.addEventListener("load", resolve, { once: true });
-      existing.addEventListener("error", reject, { once: true });
-      return;
-    }
-
-    const script = document.createElement("script");
-
-    script.src =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs";
-
-    script.type = "module";
-
-    script.onload = resolve;
-    script.onerror = reject;
-
-    document.head.appendChild(script);
-  });
-
-  if (!window.pdfjsLib) {
-    throw new Error("PDF reader could not be loaded.");
-  }
-
-  pdfJsLoaded = true;
-
-  return window.pdfjsLib;
-}
-
-/*
-  PDF extraction.
-
-  First we try to read selectable PDF text.
-  If almost no text exists, we use OCR on rendered pages.
-*/
-
-async function extractPDFText(file, statusElement) {
-  const pdfjsLib = await loadPDFJS();
-
-  const arrayBuffer = await file.arrayBuffer();
-
-  const pdf = await pdfjsLib.getDocument({
-    data: arrayBuffer
-  }).promise;
-
-  let allText = "";
-
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
-    setElementStatus(
-      statusElement,
-      `Reading PDF page ${pageNumber} of ${pdf.numPages}...`
-    );
-
-    const page = await pdf.getPage(pageNumber);
-
-    const textContent = await page.getTextContent();
-
-    const pageText = textContent.items
-      .map((item) => item.str || "")
-      .join(" ")
-      .trim();
-
-    if (pageText) {
-      allText += `\n\n[Page ${pageNumber}]\n${pageText}`;
-    }
-  }
-
-  const cleanedText = allText
-    .replace(/\s+/g, " ")
-    .replace(/\[Page (\d+)\]/g, "\n\n[Page $1]\n")
-    .trim();
-
-  /*
-    If PDF contains useful selectable text,
-    return it directly.
-  */
-
-  if (cleanedText.replace(/\[Page \d+\]/g, "").trim().length >= 50) {
-    setElementStatus(
-      statusElement,
-      `✓ PDF text extracted from ${pdf.numPages} page(s).`
-    );
-
-    return cleanedText;
-  }
-
-  /*
-    Scanned PDF fallback:
-    render pages and OCR them.
-  */
-
-  setElementStatus(
-    statusElement,
-    "PDF appears scanned. Starting OCR..."
-  );
-
-  const Tesseract = await loadTesseract();
-
-  let ocrText = "";
-
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
-    setElementStatus(
-      statusElement,
-      `OCR reading page ${pageNumber} of ${pdf.numPages}...`
-    );
-
-    const page = await pdf.getPage(pageNumber);
-
-    const viewport = page.getViewport({
-      scale: 1.8
-    });
-
-    const canvas = document.createElement("canvas");
-
-    const context = canvas.getContext("2d");
-
-    canvas.width = Math.ceil(viewport.width);
-    canvas.height = Math.ceil(viewport.height);
-
-    await page.render({
-      canvasContext: context,
-      viewport
-    }).promise;
-
-    const result = await Tesseract.recognize(
-      canvas,
-      "eng",
-      {
-        logger: (info) => {
-          if (
-            info &&
-            info.status === "recognizing text" &&
-            typeof info.progress === "number"
-          ) {
-            const percent = Math.round(info.progress * 100);
-
-            setElementStatus(
-              statusElement,
-              `OCR page ${pageNumber}/${pdf.numPages}: ${percent}%`
-            );
-          }
-        }
-      }
-    );
-
-    const pageText = result?.data?.text?.trim() || "";
-
-    if (pageText) {
-      ocrText += `\n\n[Page ${pageNumber}]\n${pageText}`;
-    }
-  }
-
-  if (!ocrText.trim()) {
-    throw new Error(
-      "No readable text was found in this PDF."
-    );
-  }
-
-  setElementStatus(
-    statusElement,
-    `✓ PDF OCR completed: ${pdf.numPages} page(s).`
-  );
-
-  return ocrText.trim();
-}
-
-if (pdfInput) {
-  pdfInput.addEventListener("change", async () => {
-    const file = pdfInput.files?.[0];
-
-    if (!file) return;
-
-    try {
-      state.material = "";
-
-      const text = await extractPDFText(
-        file,
-        pdfStatus
-      );
-
-      state.material = text;
-    } catch (error) {
-      console.error("PDF error:", error);
-
-      setElementStatus(
-        pdfStatus,
-        `Could not read PDF: ${error.message}`
-      );
-
-      state.material = "";
-    }
-  });
-}
-
-/* =========================================================
-   API CALL
-   ========================================================= */
-
-async function callKnowviaAI(payload) {
-  const response = await fetch("/api/chat", {
-    method: "POST",
-
-    headers: {
-      "Content-Type": "application/json"
-    },
-
-    body: JSON.stringify(payload)
-  });
-
-  let data;
-
-  try {
-    data = await response.json();
-  } catch (_) {
-    throw new Error(
-      "The server returned an invalid response."
-    );
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      data?.error ||
-      data?.message ||
-      "AI request failed."
-    );
-  }
-
-  /*
-    New chat.js consistently returns:
-      { answer: "..." }
-
-    This also accepts a direct result as a fallback.
-  */
-
-  if (
-    data &&
-    typeof data.answer === "string" &&
-    data.answer.trim()
-  ) {
-    return data;
-  }
-
-  if (
-    data &&
-    typeof data.result === "string" &&
-    data.result.trim()
-  ) {
-    return {
-      answer: data.result
-    };
-  }
-
-  /*
-    If the backend accidentally returns the JSON object
-    directly, convert it into the expected answer format.
-  */
-
-  if (data && typeof data === "object") {
-    const possibleObject =
-      data.summary ||
-      data.flashcards ||
-      data.quiz ||
-      data.questions ||
-      data.topics;
-
-    if (possibleObject) {
-      return {
-        answer: JSON.stringify(data)
-      };
-    }
-  }
-
-  throw new Error(
-    "AI returned an empty response."
-  );
-}
-
-/* =========================================================
-   JSON PARSER
-   ========================================================= */
-
-function parseAIJSON(value) {
-  if (typeof value !== "string") {
-    return value;
-  }
-
-  let text = value.trim();
-
-  /*
-    Remove markdown code fences.
-  */
-
-  text = text
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-
-  /*
-    First normal JSON.parse.
-  */
-
-  try {
-    return JSON.parse(text);
-  } catch (_) {}
-
-  /*
-    Try to find the first JSON object.
-  */
-
-  const objectStart = text.indexOf("{");
-  const objectEnd = text.lastIndexOf("}");
-
-  if (objectStart !== -1 && objectEnd > objectStart) {
-    const objectText = text.slice(
-      objectStart,
-      objectEnd + 1
-    );
-
-    try {
-      return JSON.parse(objectText);
-    } catch (_) {}
-  }
-
-  /*
-    Try JSON array.
-  */
-
-  const arrayStart = text.indexOf("[");
-  const arrayEnd = text.lastIndexOf("]");
-
-  if (arrayStart !== -1 && arrayEnd > arrayStart) {
-    const arrayText = text.slice(
-      arrayStart,
-      arrayEnd + 1
-    );
-
-    try {
-      return JSON.parse(arrayText);
-    } catch (_) {}
-  }
-
-  throw new Error(
-    "The AI returned data in an unexpected format."
-  );
-}
-
-/* =========================================================
-   GENERATE STUDY PACK
-   ========================================================= */
+// ============================================================
+// GENERATE STUDY PACK
+// ============================================================
 
 async function generateStudyPack() {
+
   if (state.busy) return;
 
-  let material = getCurrentMaterial();
+  const topic =
+    textValue(topicInput);
 
-  if (!material) {
+  const material =
+    getCurrentMaterial();
+
+  if (state.source === "topic" && !topic) {
     setStatus(
-      "Please enter a topic, add notes, upload handwriting, or upload a PDF.",
+      "Please enter a topic first.",
       "error"
     );
     return;
   }
 
-  /*
-    Prevent sending an extremely large PDF/notes payload.
-    The backend also limits it.
-  */
-
-  material = material.slice(0, 50000);
-
-  state.material = material;
-  state.title = getTitle();
-
-  state.difficulty =
-    difficultyInput?.value || "beginner";
-
-  state.questionStyle =
-    questionStyleInput?.value || "mixed";
+  if (
+    state.source !== "topic" &&
+    !material
+  ) {
+    setStatus(
+      "Please provide some study material first.",
+      "error"
+    );
+    return;
+  }
 
   state.busy = true;
 
@@ -732,60 +471,125 @@ async function generateStudyPack() {
   }
 
   setStatus(
-    "Knowvia is creating your study pack...",
-    ""
+    "Generating your study pack...",
+    "loading"
   );
 
   try {
-    const result = await callKnowviaAI({
-      task: "study_pack",
 
-      topic: state.title,
+    state.title =
+      getCurrentTitle();
 
-      difficulty: state.difficulty,
+    state.material =
+      material;
 
-      material: state.material,
+    state.difficulty =
+      difficultySelect
+        ? difficultySelect.value
+        : "beginner";
 
-      quizStyle: state.questionStyle
-    });
+    state.questionStyle =
+      questionStyleSelect
+        ? questionStyleSelect.value
+        : "mixed";
 
-    const pack = parseAIJSON(result.answer);
 
-    if (!pack || typeof pack !== "object") {
+    const result =
+      await callKnowviaAI({
+
+        task: "study_pack",
+
+        topic:
+          topic || state.title,
+
+        material:
+          material,
+
+        difficulty:
+          state.difficulty,
+
+        quizStyle:
+          state.questionStyle
+      });
+
+
+    const pack =
+      extractStudyPack(result);
+
+
+    if (!pack) {
       throw new Error(
-        "Invalid study pack received."
+        "Gemini did not return a valid study pack."
       );
     }
 
-    renderStudyPack(pack);
+
+    // Save data
+    state.flashcards =
+      Array.isArray(pack.flashcards)
+        ? pack.flashcards
+        : [];
+
+    state.quiz =
+      Array.isArray(pack.quiz)
+        ? pack.quiz
+        : [];
+
+    state.cardIndex = 0;
+
+    state.quizAnswers =
+      new Array(state.quiz.length)
+        .fill(null);
+
+    state.lastMistake = null;
+
+
+    // Render everything
+    renderSummary(
+      pack.summary
+    );
+
+    renderFlashcards();
+
+    renderQuiz();
+
+    renderPracticeQuestions(
+      pack.practiceQuestions
+    );
+
+    renderExamQuestions(
+      pack.examQuestions
+    );
+
+    resetInsights();
+
 
     setStatus(
-      "✓ Your study pack is ready!",
+      "Study pack generated successfully! 🎉",
       "success"
     );
 
-    /*
-      Scroll to summary.
-    */
 
-    const summarySection =
-      document.getElementById("summary");
-
-    if (summarySection) {
-      summarySection.scrollIntoView({
+    // Scroll to summary
+    if (summaryContent) {
+      summaryContent.scrollIntoView({
         behavior: "smooth",
         block: "start"
       });
     }
+
   } catch (error) {
-    console.error("Study pack error:", error);
+
+    console.error(error);
 
     setStatus(
       error.message ||
-      "Something went wrong while generating your study pack.",
+      "Something went wrong.",
       "error"
     );
+
   } finally {
+
     state.busy = false;
 
     if (generateBtn) {
@@ -794,1172 +598,1869 @@ async function generateStudyPack() {
   }
 }
 
-if (generateBtn) {
-  generateBtn.addEventListener(
-    "click",
-    generateStudyPack
-  );
-}
 
-/* =========================================================
-   RENDER STUDY PACK
-   ========================================================= */
+// ============================================================
+// STUDY PACK PARSER
+// ============================================================
 
-function renderStudyPack(pack) {
-  /*
-    SUMMARY
-  */
+function extractStudyPack(data) {
 
-  if (summaryContent) {
-    const summary =
-      pack.summary ||
-      "No summary was generated.";
+  if (!data) return null;
 
-    summaryContent.innerHTML = formatAIText(
-      summary
-    );
-  }
-
-  /*
-    FLASHCARDS
-  */
-
-  state.flashcards =
-    Array.isArray(pack.flashcards)
-      ? pack.flashcards
-      : [];
-
-  state.cardIndex = 0;
-
-  renderFlashcard();
-
-  /*
-    QUIZ
-  */
-
-  state.quiz =
-    Array.isArray(pack.quiz)
-      ? pack.quiz
-      : [];
-
-  state.quizAnswers = new Array(
-    state.quiz.length
-  ).fill(null);
-
-  renderQuiz();
-
-  /*
-    INSIGHTS
-  */
-
-  if (insights) {
-    insights.style.display = "";
-  }
-
-  calculateInsights();
-}
-
-/* =========================================================
-   FORMAT AI TEXT
-   ========================================================= */
-
-function formatAIText(text) {
-  if (!text) {
-    return "<p>No content available.</p>";
-  }
-
-  let value = escapeHTML(text);
-
-  value = value.replace(
-    /\*\*(.*?)\*\*/g,
-    "<strong>$1</strong>"
-  );
-
-  value = value.replace(
-    /\n\n+/g,
-    "</p><p>"
-  );
-
-  value = value.replace(
-    /\n/g,
-    "<br>"
-  );
-
-  return `<p>${value}</p>`;
-}
-
-/* =========================================================
-   FLASHCARDS
-   ========================================================= */
-
-function renderFlashcard() {
-  if (!state.flashcards.length) {
-    if (cardQuestion) {
-      cardQuestion.textContent =
-        "Generate a study pack to create flashcards.";
-    }
-
-    if (cardAnswer) {
-      cardAnswer.textContent = "";
-    }
-
-    if (cardProgress) {
-      cardProgress.textContent = "0 / 0";
-    }
-
-    return;
-  }
-
-  const card =
-    state.flashcards[state.cardIndex];
-
-  if (!card) return;
-
-  if (cardQuestion) {
-    cardQuestion.textContent =
-      card.question || "Question";
-  }
-
-  if (cardAnswer) {
-    cardAnswer.textContent =
-      card.answer || "Answer";
-  }
-
-  if (cardProgress) {
-    cardProgress.textContent =
-      `${state.cardIndex + 1} / ${state.flashcards.length}`;
-  }
-
-  if (flashcard) {
-    flashcard.classList.remove("flipped");
-  }
-}
-
-if (prevCard) {
-  prevCard.addEventListener("click", () => {
-    if (!state.flashcards.length) return;
-
-    state.cardIndex =
-      (state.cardIndex - 1 + state.flashcards.length) %
-      state.flashcards.length;
-
-    renderFlashcard();
-  });
-}
-
-if (nextCard) {
-  nextCard.addEventListener("click", () => {
-    if (!state.flashcards.length) return;
-
-    state.cardIndex =
-      (state.cardIndex + 1) %
-      state.flashcards.length;
-
-    renderFlashcard();
-  });
-}
-
-if (flipCard) {
-  flipCard.addEventListener("click", () => {
-    if (!flashcard) return;
-
-    flashcard.classList.toggle("flipped");
-  });
-}
-
-/* =========================================================
-   FLASHCARD CONFIDENCE
-   ========================================================= */
-
-document
-  .querySelectorAll("[data-confidence]")
-  .forEach((button) => {
-    button.addEventListener("click", () => {
-      const confidence =
-        button.dataset.confidence;
-
-      button.classList.add("selected");
-
-      setTimeout(() => {
-        button.classList.remove("selected");
-      }, 500);
-
-      /*
-        Confidence can later be used by the weak-topic
-        system. No database/localStorage is required.
-      */
-
-      console.log(
-        "Flashcard confidence:",
-        confidence
-      );
-    });
-  });
-
-/* =========================================================
-   QUIZ
-   ========================================================= */
-
-function renderQuiz() {
-  if (!quizContainer) return;
-
-  if (!state.quiz.length) {
-    quizContainer.innerHTML =
-      `<p class="empty-state">
-        Generate a study pack to create a quiz.
-      </p>`;
-
-    return;
-  }
-
-  quizContainer.innerHTML = state.quiz
-    .map((question, index) => {
-      const options = Array.isArray(
-        question.options
-      )
-        ? question.options
-        : [];
-
-      return `
-        <div class="quiz-question" data-index="${index}">
-          <h3>
-            ${index + 1}. ${escapeHTML(
-              question.question || ""
-            )}
-          </h3>
-
-          <div class="quiz-options">
-            ${options
-              .map(
-                (option, optionIndex) => `
-                  <button
-                    type="button"
-                    class="quiz-option"
-                    data-question="${index}"
-                    data-option="${optionIndex}"
-                  >
-                    ${String.fromCharCode(
-                      65 + optionIndex
-                    )}.
-                    ${escapeHTML(option)}
-                  </button>
-                `
-              )
-              .join("")}
-          </div>
-
-          <div
-            class="quiz-feedback"
-            id="quizFeedback-${index}"
-          ></div>
-        </div>
-      `;
-    })
-    .join("");
-
-  quizContainer
-    .querySelectorAll(".quiz-option")
-    .forEach((button) => {
-      button.addEventListener(
-        "click",
-        handleQuizAnswer
-      );
-    });
-}
-
-function handleQuizAnswer(event) {
-  const button = event.currentTarget;
-
-  const questionIndex = Number(
-    button.dataset.question
-  );
-
-  const selectedOption = Number(
-    button.dataset.option
-  );
-
-  const question =
-    state.quiz[questionIndex];
-
-  if (!question) return;
-
-  /*
-    Prevent changing an already answered question.
-  */
-
+  // Direct JSON response
   if (
-    state.quizAnswers[questionIndex] !== null
+    data.summary ||
+    Array.isArray(data.flashcards) ||
+    Array.isArray(data.quiz)
   ) {
-    return;
+    return data;
   }
 
-  state.quizAnswers[questionIndex] =
-    selectedOption;
+  // If backend returned answer/result containing JSON
+  const raw =
+    data.answer ||
+    data.result;
 
-  const correctAnswer =
-    Number(question.correctAnswer);
-
-  const buttons = document.querySelectorAll(
-    `[data-question="${questionIndex}"]`
-  );
-
-  buttons.forEach((item) => {
-    item.disabled = true;
-
-    const option =
-      Number(item.dataset.option);
-
-    if (option === correctAnswer) {
-      item.classList.add("correct");
-    }
-
-    if (
-      option === selectedOption &&
-      option !== correctAnswer
-    ) {
-      item.classList.add("wrong");
-    }
-  });
-
-  const feedback =
-    $(`quizFeedback-${questionIndex}`);
-
-  const isCorrect =
-    selectedOption === correctAnswer;
-
-  if (feedback) {
-    feedback.innerHTML = `
-      <div class="${
-        isCorrect
-          ? "correct-feedback"
-          : "wrong-feedback"
-      }">
-        <strong>
-          ${isCorrect ? "✓ Correct!" : "✗ Incorrect"}
-        </strong>
-
-        ${
-          question.explanation
-            ? `<p>${escapeHTML(
-                question.explanation
-              )}</p>`
-            : ""
-        }
-      </div>
-    `;
-  }
-
-  if (!isCorrect) {
-    state.lastMistake = {
-      question:
-        question.question || "",
-
-      selectedAnswer:
-        question.options?.[selectedOption] ||
-        "",
-
-      correctAnswer:
-        question.options?.[correctAnswer] ||
-        "",
-
-      topic:
-        question.topic ||
-        state.title
-    };
-
-    showMistakeButton();
-  }
-
-  calculateInsights();
-}
-
-/* =========================================================
-   QUIZ RESULTS
-   ========================================================= */
-
-function getQuizScore() {
-  if (!state.quiz.length) {
-    return 0;
-  }
-
-  let correct = 0;
-
-  state.quiz.forEach((question, index) => {
-    if (
-      state.quizAnswers[index] !== null &&
-      Number(state.quizAnswers[index]) ===
-        Number(question.correctAnswer)
-    ) {
-      correct++;
-    }
-  });
-
-  return Math.round(
-    (correct / state.quiz.length) * 100
-  );
-}
-
-/* =========================================================
-   INSIGHTS
-   ========================================================= */
-
-function setProgress(bar, scoreElement, score) {
-  const safeScore = Math.max(
-    0,
-    Math.min(100, Number(score) || 0)
-  );
-
-  if (bar) {
-    bar.style.width = `${safeScore}%`;
-  }
-
-  if (scoreElement) {
-    scoreElement.textContent =
-      `${safeScore}%`;
-  }
-}
-
-function calculateInsights() {
-  const answered = state.quizAnswers.filter(
-    (answer) => answer !== null
-  ).length;
-
-  const score = getQuizScore();
-
-  const understanding =
-    answered === 0
-      ? 0
-      : score;
-
-  const recall =
-    state.flashcards.length
-      ? Math.min(
-          100,
-          Math.round(
-            (answered /
-              Math.max(
-                state.quiz.length,
-                1
-              )) *
-              100
-          )
-        )
-      : 0;
-
-  const application =
-    Math.round(
-      (understanding * 0.7) +
-      (recall * 0.3)
-    );
-
-  setProgress(
-    understandingBar,
-    understandingScore,
-    understanding
-  );
-
-  setProgress(
-    recallBar,
-    recallScore,
-    recall
-  );
-
-  setProgress(
-    applicationBar,
-    applicationScore,
-    application
-  );
-}
-
-/* =========================================================
-   WEAK TOPICS
-   ========================================================= */
-
-if (weakTopicsBtn) {
-  weakTopicsBtn.addEventListener(
-    "click",
-    targetedRetest
-  );
-}
-
-async function targetedRetest() {
-  if (!state.quiz.length) {
-    showFeatureOutput(
-      "Please generate a study pack and answer some quiz questions first."
-    );
-
-    return;
-  }
-
-  const wrongQuestions = [];
-
-  state.quiz.forEach((question, index) => {
-    const selected =
-      state.quizAnswers[index];
-
-    if (
-      selected !== null &&
-      Number(selected) !==
-        Number(question.correctAnswer)
-    ) {
-      wrongQuestions.push({
-        question:
-          question.question || "",
-
-        selectedAnswer:
-          question.options?.[selected] || "",
-
-        correctAnswer:
-          question.options?.[
-            Number(question.correctAnswer)
-          ] || "",
-
-        topic:
-          question.topic ||
-          state.title
-      });
-    }
-  });
-
-  if (!wrongQuestions.length) {
-    if (weakTopicsContent) {
-      weakTopicsContent.innerHTML =
-        `<p>🎉 No weak topics detected yet. You answered all attempted questions correctly.</p>`;
-    }
-
-    return;
-  }
-
-  if (weakTopicsContent) {
-    weakTopicsContent.innerHTML =
-      "<p>Analyzing your weak topics...</p>";
-  }
+  if (!raw) return null;
 
   try {
-    const result = await callKnowviaAI({
-      task: "weak_topics",
-
-      material: state.material,
-
-      difficulty: state.difficulty,
-
-      quizResults: JSON.stringify(
-        wrongQuestions
-      )
-    });
-
-    const parsed =
-      parseAIJSON(result.answer);
-
-    renderWeakTopics(parsed);
+    return parseJSON(raw);
   } catch (error) {
     console.error(
-      "Weak topic error:",
+      "Study pack JSON error:",
       error
-    );
-
-    if (weakTopicsContent) {
-      weakTopicsContent.innerHTML =
-        `<p>${escapeHTML(
-          error.message
-        )}</p>`;
-    }
-  }
-}
-
-function renderWeakTopics(data) {
-  if (!weakTopicsContent) return;
-
-  if (Array.isArray(data)) {
-    weakTopicsContent.innerHTML =
-      data
-        .map(
-          (item) =>
-            `<p>• ${escapeHTML(
-              typeof item === "string"
-                ? item
-                : JSON.stringify(item)
-            )}</p>`
-        )
-        .join("");
-
-    return;
-  }
-
-  if (data && typeof data === "object") {
-    let html = "";
-
-    if (data.weakTopics) {
-      html += `
-        <h4>Weak Topics</h4>
-        ${formatAIText(
-          Array.isArray(data.weakTopics)
-            ? data.weakTopics.join("\n")
-            : data.weakTopics
-        )}
-      `;
-    }
-
-    if (data.explanation) {
-      html += `
-        <h4>Why</h4>
-        ${formatAIText(data.explanation)}
-      `;
-    }
-
-    if (data.retestQuestions) {
-      html += `
-        <h4>Targeted Re-test</h4>
-        ${formatAIText(
-          Array.isArray(
-            data.retestQuestions
-          )
-            ? data.retestQuestions
-                .map(
-                  (q, i) =>
-                    `${i + 1}. ${
-                      q.question || q
-                    }`
-                )
-                .join("\n")
-            : data.retestQuestions
-        )}
-      `;
-    }
-
-    weakTopicsContent.innerHTML =
-      html ||
-      formatAIText(
-        JSON.stringify(data, null, 2)
-      );
-
-    return;
-  }
-
-  weakTopicsContent.innerHTML =
-    formatAIText(data);
-}
-
-/* =========================================================
-   EXPLAIN MY MISTAKE
-   ========================================================= */
-
-function showMistakeButton() {
-  if (!explainMistakeBtn) return;
-
-  explainMistakeBtn.disabled = false;
-  explainMistakeBtn.style.display = "";
-}
-
-if (explainMistakeBtn) {
-  explainMistakeBtn.addEventListener(
-    "click",
-    explainMistake
-  );
-}
-
-async function explainMistake() {
-  const mistake =
-    state.lastMistake;
-
-  if (!mistake) {
-    showFeatureOutput(
-      "Answer a quiz question incorrectly first, then use Explain My Mistake."
-    );
-
-    return;
-  }
-
-  if (mistakeContent) {
-    mistakeContent.innerHTML =
-      "<p>AI is explaining your mistake...</p>";
-  }
-
-  try {
-    /*
-      IMPORTANT:
-      These names match api/chat.js:
-        studentAnswer
-        correctAnswer
-    */
-
-    const result = await callKnowviaAI({
-      task: "explain_mistake",
-
-      question: mistake.question,
-
-      studentAnswer:
-        mistake.selectedAnswer,
-
-      correctAnswer:
-        mistake.correctAnswer,
-
-      topic:
-        mistake.topic || state.title,
-
-      material:
-        state.material
-    });
-
-    if (mistakeContent) {
-      mistakeContent.innerHTML =
-        formatAIText(result.answer);
-    }
-  } catch (error) {
-    console.error(
-      "Explain mistake error:",
-      error
-    );
-
-    if (mistakeContent) {
-      mistakeContent.innerHTML =
-        `<p>${escapeHTML(
-          error.message
-        )}</p>`;
-    }
-  }
-}
-
-/* =========================================================
-   KNOWLEDGE MAP
-   ========================================================= */
-
-if (knowledgeMapBtn) {
-  knowledgeMapBtn.addEventListener(
-    "click",
-    generateKnowledgeMap
-  );
-}
-
-async function generateKnowledgeMap() {
-  if (!state.material) {
-    showFeatureOutput(
-      "Generate a study pack first."
-    );
-
-    return;
-  }
-
-  if (knowledgeMapContent) {
-    knowledgeMapContent.innerHTML =
-      "<p>Building your knowledge map...</p>";
-  }
-
-  try {
-    const result = await callKnowviaAI({
-      task: "knowledge_map",
-
-      material: state.material,
-
-      topic: state.title,
-
-      difficulty: state.difficulty
-    });
-
-    const parsed =
-      parseAIJSON(result.answer);
-
-    renderKnowledgeMap(parsed);
-  } catch (error) {
-    console.error(
-      "Knowledge map error:",
-      error
-    );
-
-    if (knowledgeMapContent) {
-      knowledgeMapContent.innerHTML =
-        `<p>${escapeHTML(
-          error.message
-        )}</p>`;
-    }
-  }
-}
-
-function renderKnowledgeMap(data) {
-  if (!knowledgeMapContent) return;
-
-  if (
-    data &&
-    typeof data === "object"
-  ) {
-    let html = "";
-
-    if (data.title) {
-      html += `
-        <h3>${escapeHTML(
-          data.title
-        )}</h3>
-      `;
-    }
-
-    if (data.nodes) {
-      const nodes = Array.isArray(
-        data.nodes
-      )
-        ? data.nodes
-        : [data.nodes];
-
-      html += `
-        <div class="knowledge-map-list">
-          ${nodes
-            .map((node) => {
-              if (
-                typeof node === "string"
-              ) {
-                return `<div class="knowledge-node">${escapeHTML(
-                  node
-                )}</div>`;
-              }
-
-              return `
-                <div class="knowledge-node">
-                  <strong>
-                    ${escapeHTML(
-                      node.name ||
-                      node.topic ||
-                      "Concept"
-                    )}
-                  </strong>
-
-                  ${
-                    node.description
-                      ? `<p>${escapeHTML(
-                          node.description
-                        )}</p>`
-                      : ""
-                  }
-                </div>
-              `;
-            })
-            .join("")}
-        </div>
-      `;
-    }
-
-    if (data.connections) {
-      html += `
-        <h4>Connections</h4>
-        ${formatAIText(
-          Array.isArray(
-            data.connections
-          )
-            ? data.connections
-                .map(
-                  (connection) =>
-                    `• ${typeof connection === "string"
-                      ? connection
-                      : JSON.stringify(
-                          connection
-                        )}`
-                )
-                .join("\n")
-            : data.connections
-        )}
-      `;
-    }
-
-    knowledgeMapContent.innerHTML =
-      html ||
-      formatAIText(
-        JSON.stringify(data, null, 2)
-      );
-
-    return;
-  }
-
-  knowledgeMapContent.innerHTML =
-    formatAIText(data);
-}
-
-/* =========================================================
-   FEATURE OUTPUT / MODALS
-   ========================================================= */
-
-function showFeatureOutput(content) {
-  if (!featureOutput) {
-    alert(
-      typeof content === "string"
-        ? content
-        : "No output available."
-    );
-
-    return;
-  }
-
-  featureOutput.innerHTML =
-    typeof content === "string"
-      ? formatAIText(content)
-      : formatAIText(
-          JSON.stringify(
-            content,
-            null,
-            2
-          )
-        );
-
-  featureOutput.scrollIntoView({
-    behavior: "smooth",
-    block: "center"
-  });
-}
-
-/* =========================================================
-   GENERIC AI FEATURE
-   ========================================================= */
-
-async function runAIInFeature(
-  task,
-  extraPayload = {},
-  loadingMessage = "Knowvia is thinking..."
-) {
-  showFeatureOutput(
-    loadingMessage
-  );
-
-  try {
-    const result =
-      await callKnowviaAI({
-        task,
-
-        material: state.material,
-
-        topic: state.title,
-
-        difficulty: state.difficulty,
-
-        ...extraPayload
-      });
-
-    showFeatureOutput(
-      result.answer
-    );
-
-    return result.answer;
-  } catch (error) {
-    console.error(
-      `${task} error:`,
-      error
-    );
-
-    showFeatureOutput(
-      `Error: ${error.message}`
     );
 
     return null;
   }
 }
 
-/* =========================================================
-   TEACH ME
-   ========================================================= */
 
-if (teachBtn) {
-  teachBtn.addEventListener(
-    "click",
-    async () => {
-      if (!state.material) {
-        showFeatureOutput(
-          "Generate a study pack or add study material first."
-        );
+// ============================================================
+// JSON PARSER
+// ============================================================
 
-        return;
-      }
+function parseJSON(value) {
 
-      await runAIInFeature(
-        "teach",
+  if (
+    typeof value === "object" &&
+    value !== null
+  ) {
+    return value;
+  }
 
-        {
-          topic: state.title
-        },
+  let cleaned =
+    String(value || "").trim();
 
-        "👩‍🏫 Knowvia is preparing a simple teaching explanation..."
+
+  // Remove markdown fences
+  cleaned =
+    cleaned
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {}
+
+
+  // Extract object
+  const objectStart =
+    cleaned.indexOf("{");
+
+  const objectEnd =
+    cleaned.lastIndexOf("}");
+
+
+  if (
+    objectStart !== -1 &&
+    objectEnd > objectStart
+  ) {
+
+    try {
+      return JSON.parse(
+        cleaned.slice(
+          objectStart,
+          objectEnd + 1
+        )
       );
-    }
-  );
-}
+    } catch {}
+  }
 
-/* =========================================================
-   STUDY SESSION
-   ========================================================= */
 
-if (studySessionBtn) {
-  studySessionBtn.addEventListener(
-    "click",
-    async () => {
-      if (!state.material) {
-        showFeatureOutput(
-          "Generate a study pack or add study material first."
-        );
+  // Extract array
+  const arrayStart =
+    cleaned.indexOf("[");
 
-        return;
-      }
+  const arrayEnd =
+    cleaned.lastIndexOf("]");
 
-      await runAIInFeature(
-        "study_session",
 
-        {
-          topic: state.title
-        },
+  if (
+    arrayStart !== -1 &&
+    arrayEnd > arrayStart
+  ) {
 
-        "⏱️ Knowvia is creating your study session..."
+    try {
+      return JSON.parse(
+        cleaned.slice(
+          arrayStart,
+          arrayEnd + 1
+        )
       );
-    }
+    } catch {}
+  }
+
+
+  throw new Error(
+    "Invalid JSON returned by AI."
   );
 }
 
-/* =========================================================
-   EXAM MODE
-   ========================================================= */
 
-if (examModeBtn) {
-  examModeBtn.addEventListener(
-    "click",
-    async () => {
-      if (!state.material) {
-        showFeatureOutput(
-          "Generate a study pack or add study material first."
+// ============================================================
+// SUMMARY
+// ============================================================
+
+function renderSummary(summary) {
+
+  if (!summaryContent) return;
+
+  if (!summary) {
+    summaryContent.innerHTML =
+      "<p>No summary was generated.</p>";
+
+    return;
+  }
+
+  summaryContent.innerHTML =
+    formatAIText(summary);
+}
+
+
+// ============================================================
+// FLASHCARDS
+// ============================================================
+
+function renderFlashcards() {
+
+  if (!state.flashcards.length) {
+
+    if (cardQuestion) {
+      cardQuestion.textContent =
+        "No flashcards available.";
+    }
+
+    if (cardAnswer) {
+      cardAnswer.textContent =
+        "Generate a study pack first.";
+    }
+
+    return;
+  }
+
+  updateFlashcardUI();
+}
+
+
+function updateFlashcardUI() {
+
+  if (!state.flashcards.length) {
+
+    if (cardQuestion) {
+      cardQuestion.textContent =
+        "Your flashcards will appear here.";
+    }
+
+    if (cardAnswer) {
+      cardAnswer.textContent =
+        "";
+    }
+
+    if (cardProgress) {
+      cardProgress.textContent =
+        "0 / 0";
+    }
+
+    return;
+  }
+
+
+  const card =
+    state.flashcards[state.cardIndex];
+
+
+  if (cardQuestion) {
+    cardQuestion.textContent =
+      card.question ||
+      "Question";
+  }
+
+
+  if (cardAnswer) {
+    cardAnswer.textContent =
+      card.answer ||
+      "Answer";
+  }
+
+
+  if (cardProgress) {
+    cardProgress.textContent =
+      `${state.cardIndex + 1} / ${state.flashcards.length}`;
+  }
+
+
+  if (flashcard) {
+    flashcard.classList.remove("flipped");
+  }
+}
+
+
+function showPreviousCard() {
+
+  if (!state.flashcards.length) return;
+
+  state.cardIndex--;
+
+  if (state.cardIndex < 0) {
+    state.cardIndex =
+      state.flashcards.length - 1;
+  }
+
+  updateFlashcardUI();
+}
+
+
+function showNextCard() {
+
+  if (!state.flashcards.length) return;
+
+  state.cardIndex++;
+
+  if (
+    state.cardIndex >=
+    state.flashcards.length
+  ) {
+    state.cardIndex = 0;
+  }
+
+  updateFlashcardUI();
+}
+
+
+function flipCurrentCard() {
+
+  if (!flashcard) return;
+
+  flashcard.classList.toggle("flipped");
+}
+
+
+// ============================================================
+// QUIZ
+// ============================================================
+
+function renderQuiz() {
+
+  if (!quizContainer) return;
+
+  if (!state.quiz.length) {
+
+    quizContainer.innerHTML = `
+      <p class="empty-state">
+        Generate a study pack to start the quiz.
+      </p>
+    `;
+
+    return;
+  }
+
+
+  quizContainer.innerHTML = "";
+
+
+  state.quiz.forEach((quiz, index) => {
+
+    const questionCard =
+      document.createElement("div");
+
+    questionCard.className =
+      "quiz-question";
+
+
+    const title =
+      document.createElement("h3");
+
+    title.textContent =
+      `${index + 1}. ${quiz.question || ""}`;
+
+
+    questionCard.appendChild(title);
+
+
+    const options =
+      Array.isArray(quiz.options)
+        ? quiz.options
+        : [];
+
+
+    options.forEach(
+      (option, optionIndex) => {
+
+        const label =
+          document.createElement("label");
+
+        label.className =
+          "quiz-option";
+
+
+        const input =
+          document.createElement("input");
+
+        input.type = "radio";
+
+        input.name =
+          `quiz-${index}`;
+
+        input.value =
+          optionIndex;
+
+
+        input.addEventListener(
+          "change",
+          () => {
+
+            state.quizAnswers[index] =
+              optionIndex;
+
+            updateQuizResult();
+          }
         );
 
-        return;
+
+        const span =
+          document.createElement("span");
+
+        span.textContent =
+          option;
+
+
+        label.appendChild(input);
+
+        label.appendChild(span);
+
+        questionCard.appendChild(label);
       }
+    );
 
-      await runAIInFeature(
-        "exam",
 
-        {
-          topic: state.title,
+    quizContainer.appendChild(
+      questionCard
+    );
+  });
 
-          questionStyle:
-            state.questionStyle
-        },
 
-        "📝 Knowvia is preparing Exam Mode..."
-      );
-    }
+  const resultBox =
+    document.createElement("div");
+
+  resultBox.id =
+    "quizResult";
+
+  resultBox.className =
+    "quiz-result";
+
+  resultBox.innerHTML =
+    "<strong>Answer the questions to see your score.</strong>";
+
+
+  quizContainer.appendChild(
+    resultBox
   );
 }
 
-/* =========================================================
-   ASK MY NOTES
-   ========================================================= */
 
-if (askNotesBtn) {
-  askNotesBtn.addEventListener(
-    "click",
-    async () => {
-      if (!state.material) {
-        showFeatureOutput(
-          "Please add notes or generate a study pack first."
-        );
+// ============================================================
+// QUIZ SCORING
+// ============================================================
 
-        return;
-      }
+function calculateQuizScore() {
 
-      const question =
-        window.prompt(
-          "What do you want to ask about your notes?"
-        );
+  let correct = 0;
 
-      if (!question || !question.trim()) {
-        return;
-      }
+  let answered = 0;
 
-      await runAIInFeature(
-        "ask_notes",
 
-        {
-          question: question.trim()
-        },
+  state.quiz.forEach(
+    (quiz, index) => {
 
-        "🔎 Searching your notes..."
-      );
-    }
-  );
-}
+      const answer =
+        state.quizAnswers[index];
 
-/* =========================================================
-   EXAM PATTERN / QUESTION STYLE
-   ========================================================= */
-
-if (questionStyleInput) {
-  questionStyleInput.addEventListener(
-    "change",
-    () => {
-      state.questionStyle =
-        questionStyleInput.value;
-    }
-  );
-}
-
-/* =========================================================
-   KEYBOARD SHORTCUTS
-   ========================================================= */
-
-document.addEventListener(
-  "keydown",
-  (event) => {
-    /*
-      Ctrl + Enter = Generate
-    */
-
-    if (
-      event.ctrlKey &&
-      event.key === "Enter"
-    ) {
-      event.preventDefault();
 
       if (
-        generateBtn &&
-        !generateBtn.disabled
+        answer !== null &&
+        answer !== undefined
       ) {
-        generateStudyPack();
-      }
-    }
 
-    /*
-      Arrow keys for flashcards
-    */
+        answered++;
 
-    if (
-      document.activeElement?.tagName !==
-        "INPUT" &&
-      document.activeElement?.tagName !==
-        "TEXTAREA"
-    ) {
-      if (event.key === "ArrowLeft") {
-        prevCard?.click();
-      }
-
-      if (event.key === "ArrowRight") {
-        nextCard?.click();
-      }
-
-      if (event.key === " ") {
-        if (state.flashcards.length) {
-          event.preventDefault();
-          flipCard?.click();
+        if (
+          Number(answer) ===
+          Number(quiz.correctAnswer)
+        ) {
+          correct++;
         }
       }
     }
+  );
+
+
+  return {
+    correct,
+    answered,
+    total: state.quiz.length
+  };
+}
+
+
+function updateQuizResult() {
+
+  const resultBox =
+    $("quizResult");
+
+  if (!resultBox) return;
+
+
+  const score =
+    calculateQuizScore();
+
+
+  if (
+    score.answered <
+    score.total
+  ) {
+
+    resultBox.innerHTML = `
+      <strong>
+        ${score.answered}/${score.total}
+        answered
+      </strong>
+      <p>
+        Complete the quiz to see your final score.
+      </p>
+    `;
+
+    return;
   }
-);
 
-/* =========================================================
-   INITIAL UI
-   ========================================================= */
 
-if (insights) {
+  const percentage =
+    score.total
+      ? Math.round(
+          (score.correct /
+            score.total) * 100
+        )
+      : 0;
+
+
+  resultBox.innerHTML = `
+    <strong>
+      Score: ${score.correct}/${score.total}
+      (${percentage}%)
+    </strong>
+    <p>
+      ${
+        percentage >= 80
+          ? "Excellent work! 🎉"
+          : percentage >= 60
+          ? "Good job! Keep revising. 👍"
+          : "Keep practicing and review your weak topics. 💪"
+      }
+    </p>
+  `;
+
+
+  state.lastMistake =
+    findLastMistake();
+
+
+  updateInsights(
+    percentage
+  );
+}
+
+
+function findLastMistake() {
+
+  for (
+    let i = state.quiz.length - 1;
+    i >= 0;
+    i--
+  ) {
+
+    const quiz =
+      state.quiz[i];
+
+    const answer =
+      state.quizAnswers[i];
+
+
+    if (
+      answer !== null &&
+      answer !== undefined &&
+      Number(answer) !==
+        Number(quiz.correctAnswer)
+    ) {
+
+      return {
+        index: i,
+        question:
+          quiz.question || "",
+        studentAnswer:
+          quiz.options?.[answer] ||
+          String(answer),
+        correctAnswer:
+          quiz.options?.[
+            quiz.correctAnswer
+          ] ||
+          String(quiz.correctAnswer),
+        explanation:
+          quiz.explanation || "",
+        topic:
+          quiz.topic || "This topic"
+      };
+    }
+  }
+
+
+  return null;
+}
+
+
+// ============================================================
+// INSIGHTS
+// ============================================================
+
+function resetInsights() {
+
+  if (understandingBar) {
+    understandingBar.style.width = "0%";
+  }
+
+  if (recallBar) {
+    recallBar.style.width = "0%";
+  }
+
+  if (applicationBar) {
+    applicationBar.style.width = "0%";
+  }
+
+  if (understandingScore) {
+    understandingScore.textContent =
+      "0%";
+  }
+
+  if (recallScore) {
+    recallScore.textContent =
+      "0%";
+  }
+
+  if (applicationScore) {
+    applicationScore.textContent =
+      "0%";
+  }
+
+  if (weakTopicsContent) {
+    weakTopicsContent.innerHTML =
+      "<p>Complete the quiz to detect weak topics.</p>";
+  }
+
+  if (mistakeContent) {
+    mistakeContent.innerHTML =
+      "<p>Your mistakes will appear here after the quiz.</p>";
+  }
+
+  if (knowledgeMapContent) {
+    knowledgeMapContent.innerHTML =
+      "<p>Generate a knowledge map after studying.</p>";
+  }
+}
+
+
+function updateInsights(percentage) {
+
+  const understanding =
+    Math.min(
+      100,
+      percentage
+    );
+
+  const recall =
+    Math.min(
+      100,
+      Math.round(
+        percentage * 0.9
+      )
+    );
+
+  const application =
+    Math.min(
+      100,
+      Math.round(
+        percentage * 0.8
+      )
+    );
+
+
+  setInsight(
+    understandingBar,
+    understandingScore,
+    understanding
+  );
+
+  setInsight(
+    recallBar,
+    recallScore,
+    recall
+  );
+
+  setInsight(
+    applicationBar,
+    applicationScore,
+    application
+  );
+
+
+  if (mistakeContent) {
+
+    if (state.lastMistake) {
+
+      mistakeContent.innerHTML = `
+        <div class="mistake-preview">
+          <strong>
+            ${escapeHTML(
+              state.lastMistake.topic
+            )}
+          </strong>
+          <p>
+            You missed:
+            ${escapeHTML(
+              state.lastMistake.question
+            )}
+          </p>
+        </div>
+      `;
+
+    } else {
+
+      mistakeContent.innerHTML = `
+        <p>
+          Great! No incorrect answers detected.
+        </p>
+      `;
+    }
+  }
+}
+
+
+function setInsight(
+  bar,
+  scoreElement,
+  value
+) {
+
+  if (bar) {
+    bar.style.width =
+      `${value}%`;
+  }
+
+  if (scoreElement) {
+    scoreElement.textContent =
+      `${value}%`;
+  }
+}
+
+
+function updateInsightsVisibility() {
+
+  if (!insights) return;
+
+  // Keep the section available.
   insights.style.display = "";
 }
 
-if (explainMistakeBtn) {
-  explainMistakeBtn.disabled = true;
+
+// ============================================================
+// WEAK TOPIC DETECTOR
+// ============================================================
+
+async function targetedRetest() {
+
+  if (!state.quiz.length) {
+
+    if (weakTopicsContent) {
+      weakTopicsContent.innerHTML =
+        "<p>Please generate and complete a quiz first.</p>";
+    }
+
+    return;
+  }
+
+
+  const results =
+    buildQuizResults();
+
+
+  if (weakTopicsContent) {
+    weakTopicsContent.innerHTML =
+      "<p>Analyzing your weak topics...</p>";
+  }
+
+
+  try {
+
+    const response =
+      await callKnowviaAI({
+
+        task: "weak_topics",
+
+        topic:
+          state.title,
+
+        material:
+          state.material,
+
+        quizResults:
+          results
+      });
+
+
+    const data =
+      extractJSONResponse(response);
+
+
+    renderWeakTopics(data);
+
+
+  } catch (error) {
+
+    console.error(error);
+
+    if (weakTopicsContent) {
+      weakTopicsContent.innerHTML = `
+        <p class="error">
+          ${escapeHTML(error.message)}
+        </p>
+      `;
+    }
+  }
 }
 
-renderFlashcard();
-renderQuiz();
-calculateInsights();
 
-console.log(
-  "Knowvia app.js loaded successfully."
-);
+function buildQuizResults() {
+
+  return state.quiz.map(
+    (quiz, index) => {
+
+      const selected =
+        state.quizAnswers[index];
+
+      return {
+        question:
+          quiz.question || "",
+
+        topic:
+          quiz.topic || "General",
+
+        selectedAnswer:
+          selected !== null &&
+          selected !== undefined
+            ? quiz.options?.[selected] || ""
+            : "",
+
+        correctAnswer:
+          quiz.options?.[
+            quiz.correctAnswer
+          ] || "",
+
+        isCorrect:
+          selected !== null &&
+          selected !== undefined &&
+          Number(selected) ===
+            Number(quiz.correctAnswer)
+      };
+    }
+  );
+}
+
+
+function renderWeakTopics(data) {
+
+  if (!weakTopicsContent) return;
+
+
+  const weakTopics =
+    Array.isArray(data?.weakTopics)
+      ? data.weakTopics
+      : [];
+
+
+  if (!weakTopics.length) {
+
+    weakTopicsContent.innerHTML = `
+      <div class="success-message">
+        <strong>No major weak topics detected.</strong>
+        <p>Keep revising to maintain your performance.</p>
+      </div>
+    `;
+
+    return;
+  }
+
+
+  let html =
+    "<div class=\"weak-topic-list\">";
+
+
+  weakTopics.forEach(
+    (item) => {
+
+      html += `
+        <div class="weak-topic">
+          <strong>
+            ${escapeHTML(
+              item.topic ||
+              "Weak topic"
+            )}
+          </strong>
+
+          <span class="priority">
+            ${escapeHTML(
+              item.priority ||
+              "Review"
+            )}
+          </span>
+
+          <p>
+            ${escapeHTML(
+              item.reason ||
+              "More practice is recommended."
+            )}
+          </p>
+        </div>
+      `;
+    }
+  );
+
+
+  html += "</div>";
+
+
+  if (data?.recommendation) {
+
+    html += `
+      <div class="recommendation">
+        <strong>Recommendation:</strong>
+        <p>
+          ${escapeHTML(
+            data.recommendation
+          )}
+        </p>
+      </div>
+    `;
+  }
+
+
+  weakTopicsContent.innerHTML =
+    html;
+}
+
+
+// ============================================================
+// EXPLAIN MY MISTAKE
+// ============================================================
+
+async function explainMistake() {
+
+  if (!state.lastMistake) {
+
+    if (mistakeContent) {
+      mistakeContent.innerHTML = `
+        <p>
+          Complete the quiz and select an incorrect answer first.
+        </p>
+      `;
+    }
+
+    return;
+  }
+
+
+  if (mistakeContent) {
+    mistakeContent.innerHTML =
+      "<p>Explaining your mistake...</p>";
+  }
+
+
+  try {
+
+    const mistake =
+      state.lastMistake;
+
+
+    const response =
+      await callKnowviaAI({
+
+        task: "explain_mistake",
+
+        topic:
+          state.title,
+
+        material:
+          state.material,
+
+        question:
+          mistake.question,
+
+        studentAnswer:
+          mistake.studentAnswer,
+
+        correctAnswer:
+          mistake.correctAnswer
+      });
+
+
+    const answer =
+      extractTextResponse(
+        response
+      );
+
+
+    if (mistakeContent) {
+      mistakeContent.innerHTML =
+        formatAIText(answer);
+    }
+
+
+  } catch (error) {
+
+    console.error(error);
+
+    if (mistakeContent) {
+      mistakeContent.innerHTML = `
+        <p class="error">
+          ${escapeHTML(error.message)}
+        </p>
+      `;
+    }
+  }
+}
+
+
+// ============================================================
+// KNOWLEDGE MAP
+// ============================================================
+
+async function generateKnowledgeMap() {
+
+  if (!state.title) {
+
+    if (knowledgeMapContent) {
+      knowledgeMapContent.innerHTML =
+        "<p>Generate a study pack first.</p>";
+    }
+
+    return;
+  }
+
+
+  if (knowledgeMapContent) {
+    knowledgeMapContent.innerHTML =
+      "<p>Building your knowledge map...</p>";
+  }
+
+
+  try {
+
+    const response =
+      await callKnowviaAI({
+
+        task: "knowledge_map",
+
+        topic:
+          state.title,
+
+        material:
+          state.material,
+
+        quizResults:
+          buildQuizResults()
+      });
+
+
+    const data =
+      extractJSONResponse(response);
+
+
+    renderKnowledgeMap(data);
+
+
+  } catch (error) {
+
+    console.error(error);
+
+    if (knowledgeMapContent) {
+      knowledgeMapContent.innerHTML = `
+        <p class="error">
+          ${escapeHTML(error.message)}
+        </p>
+      `;
+    }
+  }
+}
+
+
+function renderKnowledgeMap(data) {
+
+  if (!knowledgeMapContent) return;
+
+
+  const nodes =
+    Array.isArray(data?.nodes)
+      ? data.nodes
+      : [];
+
+
+  const connections =
+    Array.isArray(data?.connections)
+      ? data.connections
+      : [];
+
+
+  let html = `
+    <div class="knowledge-map">
+      <h3>
+        ${escapeHTML(
+          data?.centralTopic ||
+          data?.title ||
+          "Knowledge Map"
+        )}
+      </h3>
+  `;
+
+
+  if (nodes.length) {
+
+    html += `
+      <div class="knowledge-nodes">
+    `;
+
+
+    nodes.forEach(
+      (node) => {
+
+        html += `
+          <div class="knowledge-node">
+            <strong>
+              ${escapeHTML(
+                node.name ||
+                "Concept"
+              )}
+            </strong>
+
+            <span>
+              ${escapeHTML(
+                node.status ||
+                ""
+              )}
+            </span>
+          </div>
+        `;
+      }
+    );
+
+
+    html += "</div>";
+  }
+
+
+  if (connections.length) {
+
+    html += `
+      <h4>Connections</h4>
+      <ul>
+    `;
+
+
+    connections.forEach(
+      (connection) => {
+
+        html += `
+          <li>
+            <strong>
+              ${escapeHTML(
+                connection.from ||
+                ""
+              )}
+            </strong>
+
+            →
+            
+            <strong>
+              ${escapeHTML(
+                connection.to ||
+                ""
+              )}
+            </strong>
+
+            ${
+              connection.relationship
+                ? ` — ${escapeHTML(
+                    connection.relationship
+                  )}`
+                : ""
+            }
+          </li>
+        `;
+      }
+    );
+
+
+    html += "</ul>";
+  }
+
+
+  html += "</div>";
+
+
+  knowledgeMapContent.innerHTML =
+    html;
+}
+
+
+// ============================================================
+// GENERAL AI FEATURES
+// ============================================================
+
+async function runFeature(task) {
+
+  if (!state.title) {
+
+    setFeatureStatus(
+      "Generate a study pack first."
+    );
+
+    return;
+  }
+
+
+  setFeatureStatus(
+    "Knowvia is thinking..."
+  );
+
+
+  try {
+
+    const response =
+      await callKnowviaAI({
+
+        task,
+
+        topic:
+          state.title,
+
+        material:
+          state.material,
+
+        difficulty:
+          state.difficulty
+      });
+
+
+    const answer =
+      extractTextResponse(
+        response
+      );
+
+
+    if (featureOutput) {
+      featureOutput.innerHTML =
+        formatAIText(answer);
+    }
+
+
+  } catch (error) {
+
+    console.error(error);
+
+    if (featureOutput) {
+      featureOutput.innerHTML = `
+        <div class="error">
+          ${escapeHTML(error.message)}
+        </div>
+      `;
+    }
+  }
+}
+
+
+// ============================================================
+// ASK MY NOTES
+// ============================================================
+
+async function askMyNotes() {
+
+  if (!state.title) {
+
+    setFeatureStatus(
+      "Generate or provide study material first."
+    );
+
+    return;
+  }
+
+
+  const question =
+    window.prompt(
+      "What do you want to ask about your notes?"
+    );
+
+
+  if (!question) return;
+
+
+  setFeatureStatus(
+    "Searching your notes..."
+  );
+
+
+  try {
+
+    const response =
+      await callKnowviaAI({
+
+        task: "ask_notes",
+
+        topic:
+          state.title,
+
+        material:
+          state.material,
+
+        question:
+          question,
+
+        difficulty:
+          state.difficulty
+      });
+
+
+    const answer =
+      extractTextResponse(
+        response
+      );
+
+
+    if (featureOutput) {
+
+      featureOutput.innerHTML = `
+        <div class="ask-notes-answer">
+
+          <h3>
+            Your question
+          </h3>
+
+          <p>
+            ${escapeHTML(question)}
+          </p>
+
+          <h3>
+            Knowvia's answer
+          </h3>
+
+          ${formatAIText(answer)}
+
+        </div>
+      `;
+    }
+
+
+  } catch (error) {
+
+    console.error(error);
+
+    setFeatureStatus(
+      error.message ||
+      "Unable to answer your question."
+    );
+  }
+}
+
+
+// ============================================================
+// TEXT / JSON RESPONSE HELPERS
+// ============================================================
+
+function extractTextResponse(data) {
+
+  if (!data) return "";
+
+  if (
+    typeof data === "string"
+  ) {
+    return data;
+  }
+
+  if (
+    typeof data.answer === "string"
+  ) {
+    return data.answer;
+  }
+
+  if (
+    typeof data.result === "string"
+  ) {
+    return data.result;
+  }
+
+  return "";
+}
+
+
+function extractJSONResponse(data) {
+
+  if (!data) return null;
+
+
+  if (
+    typeof data === "object" &&
+    !Array.isArray(data)
+  ) {
+
+    if (
+      data.weakTopics ||
+      data.nodes ||
+      data.centralTopic ||
+      data.title
+    ) {
+      return data;
+    }
+  }
+
+
+  const raw =
+    data.answer ||
+    data.result;
+
+
+  if (!raw) return null;
+
+
+  try {
+    return parseJSON(raw);
+  } catch {
+    return null;
+  }
+}
+
+
+// ============================================================
+// PRACTICE / EXAM QUESTIONS
+// ============================================================
+
+function renderPracticeQuestions(questions) {
+
+  if (!Array.isArray(questions)) return;
+
+  /*
+    These are rendered into the existing quiz area
+    only when useful.
+  */
+
+  if (!quizContainer) return;
+
+  if (!questions.length) return;
+
+
+  const section =
+    document.createElement("div");
+
+  section.className =
+    "practice-questions";
+
+
+  section.innerHTML =
+    "<h3>Practice Questions</h3>";
+
+
+  const list =
+    document.createElement("ol");
+
+
+  questions.forEach(
+    (question) => {
+
+      const item =
+        document.createElement("li");
+
+      item.textContent =
+        question;
+
+      list.appendChild(item);
+    }
+  );
+
+
+  section.appendChild(list);
+
+  quizContainer.appendChild(section);
+}
+
+
+function renderExamQuestions(questions) {
+
+  if (!Array.isArray(questions)) return;
+
+  if (!quizContainer) return;
+
+  if (!questions.length) return;
+
+
+  const section =
+    document.createElement("div");
+
+  section.className =
+    "exam-questions";
+
+
+  section.innerHTML =
+    "<h3>Exam Questions</h3>";
+
+
+  const list =
+    document.createElement("ol");
+
+
+  questions.forEach(
+    (question) => {
+
+      const item =
+        document.createElement("li");
+
+      item.textContent =
+        question;
+
+      list.appendChild(item);
+    }
+  );
+
+
+  section.appendChild(list);
+
+  quizContainer.appendChild(section);
+}
+
+
+// ============================================================
+// PDF EXTRACTION
+// ============================================================
+
+async function handlePDFUpload(event) {
+
+  const file =
+    event.target.files?.[0];
+
+
+  if (!file) return;
+
+
+  if (
+    typeof pdfjsLib ===
+    "undefined"
+  ) {
+
+    if (pdfStatus) {
+      pdfStatus.textContent =
+        "PDF.js could not be loaded.";
+    }
+
+    return;
+  }
+
+
+  if (pdfStatus) {
+    pdfStatus.textContent =
+      "Reading PDF...";
+  }
+
+
+  try {
+
+    const buffer =
+      await file.arrayBuffer();
+
+
+    const pdf =
+      await pdfjsLib.getDocument({
+        data: buffer
+      }).promise;
+
+
+    let extractedText = "";
+
+
+    for (
+      let pageNumber = 1;
+      pageNumber <= pdf.numPages;
+      pageNumber++
+    ) {
+
+      const page =
+        await pdf.getPage(
+          pageNumber
+        );
+
+
+      const content =
+        await page.getTextContent();
+
+
+      const pageText =
+        content.items
+          .map(
+            item =>
+              item.str || ""
+          )
+          .join(" ");
+
+
+      extractedText +=
+        pageText + "\n";
+    }
+
+
+    extractedText =
+      extractedText.trim();
+
+
+    if (!extractedText) {
+
+      if (pdfStatus) {
+        pdfStatus.textContent =
+          "This PDF appears to be scanned/image-based. OCR fallback can be added if needed.";
+      }
+
+      state.material = "";
+
+      return;
+    }
+
+
+    state.material =
+      extractedText.slice(
+        0,
+        30000
+      );
+
+
+    if (pdfStatus) {
+      pdfStatus.textContent =
+        `PDF loaded successfully — ${pdf.numPages} page(s).`;
+    }
+
+
+  } catch (error) {
+
+    console.error(error);
+
+    if (pdfStatus) {
+      pdfStatus.textContent =
+        "Could not read this PDF.";
+    }
+  }
+}
+
+
+// ============================================================
+// HANDWRITTEN IMAGE OCR
+// ============================================================
+
+async function handleHandwrittenUpload(event) {
+
+  const file =
+    event.target.files?.[0];
+
+
+  if (!file) return;
+
+
+  if (
+    typeof Tesseract ===
+    "undefined"
+  ) {
+
+    if (handwrittenStatus) {
+      handwrittenStatus.textContent =
+        "OCR library could not be loaded.";
+    }
+
+    return;
+  }
+
+
+  if (handwrittenStatus) {
+    handwrittenStatus.textContent =
+      "Reading handwriting... This may take a little time.";
+  }
+
+
+  try {
+
+    const result =
+      await Tesseract.recognize(
+        file,
+        "eng",
+        {
+          logger: (message) => {
+
+            if (
+              message.status ===
+              "recognizing text"
+            ) {
+
+              const progress =
+                Math.round(
+                  (message.progress || 0) *
+                  100
+                );
+
+              if (handwrittenStatus) {
+                handwrittenStatus.textContent =
+                  `Reading handwriting... ${progress}%`;
+              }
+            }
+          }
+        }
+      );
+
+
+    const extracted =
+      result?.data?.text?.trim() ||
+      "";
+
+
+    if (!extracted) {
+
+      if (handwrittenStatus) {
+        handwrittenStatus.textContent =
+          "No readable text was found.";
+      }
+
+      state.material = "";
+
+      return;
+    }
+
+
+    state.material =
+      extracted.slice(
+        0,
+        30000
+      );
+
+
+    if (handwrittenStatus) {
+      handwrittenStatus.textContent =
+        "Handwritten notes read successfully.";
+    }
+
+
+  } catch (error) {
+
+    console.error(error);
+
+    if (handwrittenStatus) {
+      handwrittenStatus.textContent =
+        "Could not read the handwriting.";
+    }
+  }
+}
+
+
+// ============================================================
+// FORMAT AI TEXT
+// ============================================================
+
+function formatAIText(value) {
+
+  if (!value) {
+    return "<p>No content returned.</p>";
+  }
+
+
+  let html =
+    escapeHTML(String(value));
+
+
+  // Headings
+  html =
+    html.replace(
+      /^### (.*)$/gm,
+      "<h4>$1</h4>"
+    );
+
+
+  html =
+    html.replace(
+      /^## (.*)$/gm,
+      "<h3>$1</h3>"
+    );
+
+
+  html =
+    html.replace(
+      /^# (.*)$/gm,
+      "<h2>$1</h2>"
+    );
+
+
+  // Bold
+  html =
+    html.replace(
+      /\*\*(.*?)\*\*/g,
+      "<strong>$1</strong>"
+    );
+
+
+  // Bullets
+  html =
+    html.replace(
+      /^\s*[-*]\s+(.*)$/gm,
+      "<li>$1</li>"
+    );
+
+
+  html =
+    html.replace(
+      /(<li>.*<\/li>\n?)+/g,
+      "<ul>$&</ul>"
+    );
+
+
+  // Numbered lists
+  html =
+    html.replace(
+      /^\s*\d+\.\s+(.*)$/gm,
+      "<li>$1</li>"
+    );
+
+
+  // Paragraphs / line breaks
+  html =
+    html.replace(
+      /\n{2,}/g,
+      "</p><p>"
+    );
+
+
+  html =
+    html.replace(
+      /\n/g,
+      "<br>"
+    );
+
+
+  return `<div class="ai-text"><p>${html}</p></div>`;
+}
+
+
+// ============================================================
+// ESCAPE HTML
+// ============================================================
+
+function escapeHTML(value) {
+
+  return String(value ?? "")
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&#039;"
+    );
+}
+
+
+// ============================================================
+// KEYBOARD SHORTCUTS
+// ============================================================
+
+function setupKeyboardShortcuts() {
+
+  document.addEventListener(
+    "keydown",
+    (event) => {
+
+      // Don't interfere with typing
+      const tag =
+        document.activeElement?.tagName;
+
+
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT"
+      ) {
+        return;
+      }
+
+
+      if (
+        event.key ===
+        "ArrowLeft"
+      ) {
+
+        showPreviousCard();
+      }
+
+
+      if (
+        event.key ===
+        "ArrowRight"
+      ) {
+
+        showNextCard();
+      }
+
+
+      if (
+        event.key ===
+        " "
+      ) {
+
+        if (state.flashcards.length) {
+
+          event.preventDefault();
+
+          flipCurrentCard();
+        }
+      }
+    }
+  );
+}
