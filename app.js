@@ -1,2656 +1,6158 @@
-/* =========================================================
-   KNOWVIA - AI STUDY COMPANION
-   Frontend Demo Version
-   No database
-   No localStorage
-========================================================= */
-function escapeHTML(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
+/* ============================================================
+   KNOWVIA - AI CONNECTED APP
+   PART 1
+   AI CONNECTION + SOURCE / PDF / HANDWRITTEN MATERIAL SUPPORT
+   ============================================================ */
 
-function formatAIResponse(text) {
-  if (!text) {
-    return "<p>No response received from AI.</p>";
-  }
+(function () {
+    "use strict";
 
-  return escapeHTML(text)
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    .replace(/^### (.*)$/gm, "<h3>$1</h3>")
-    .replace(/^## (.*)$/gm, "<h3>$1</h3>")
-    .replace(/^# (.*)$/gm, "<h3>$1</h3>")
-    .replace(/^- (.*)$/gm, "<li>$1</li>")
-    .replace(/\n\n/g, "</p><p>")
-    .replace(/\n/g, "<br>");
-}
-const $ = (id) => document.getElementById(id);
+    /* ============================================================
+       BASIC ELEMENT REFERENCES
+       ============================================================ */
 
-const state = {
-  source: "topic",
-  material: "",
-  title: "",
-  difficulty: "beginner",
+    const topicInput = document.getElementById("topic");
+    const difficultyInput = document.getElementById("difficulty");
+    const generateBtn = document.getElementById("generateBtn");
 
-  flashcards: [],
-  cardIndex: 0,
+    const summarySection = document.getElementById("summary");
+    const summaryContent = document.getElementById("summaryContent");
 
-  quiz: [],
-  quizIndex: 0,
-  score: 0,
-  answered: false,
+    const flashcardsSection = document.getElementById("flashcards");
+    const flashcard = document.getElementById("flashcard");
+    const cardQuestion = document.getElementById("cardQuestion");
+    const cardAnswer = document.getElementById("cardAnswer");
+    const prevCard = document.getElementById("prevCard");
+    const nextCard = document.getElementById("nextCard");
+    const cardProgress = document.getElementById("cardProgress");
+    const flipCard = document.getElementById("flipCard");
 
-  confidenceData: [],
-  wrongAnswers: [],
-  weakConcepts: [],
+    const quizSection = document.getElementById("quiz");
+    const quizContainer = document.getElementById("quizContainer");
 
-  extracted: false
-};
+    const themeBtn = document.getElementById("themeBtn");
 
-/* =========================================================
-   TOPIC DATA
-========================================================= */
 
-const topicPacks = {
+    /* ============================================================
+       GLOBAL STATE
+       ============================================================ */
 
-  "machine learning": {
+    let currentFlashcards = [];
+    let currentCardIndex = 0;
 
-    beginner: {
-      title: "Machine Learning",
-      summary:
-        "Machine Learning is a branch of Artificial Intelligence that allows computers to learn patterns from data and make predictions or decisions without being explicitly programmed for every task.",
-      concepts: [
-        "Artificial Intelligence",
-        "Machine Learning",
-        "Data",
-        "Features",
-        "Labels",
-        "Training",
-        "Testing"
-      ],
-      stages: [
-        "Collect data",
-        "Prepare the data",
-        "Choose a model",
-        "Train the model",
-        "Test the model",
-        "Evaluate the results"
-      ],
-      flashcards: [
-        {
-          q: "What is Machine Learning?",
-          a: "Machine Learning is a method where computers learn patterns from data and use them to make predictions or decisions."
-        },
-        {
-          q: "What is training data?",
-          a: "Training data is the data used to teach a machine learning model."
-        },
-        {
-          q: "What is a feature?",
-          a: "A feature is an input property or characteristic used by a machine learning model."
-        },
-        {
-          q: "What is a label?",
-          a: "A label is the expected output or answer associated with training data."
-        },
-        {
-          q: "What is testing?",
-          a: "Testing checks how well a trained model performs on data it has not seen during training."
+    let currentQuiz = [];
+    let currentQuizIndex = 0;
+    let currentQuizAnswers = [];
+
+    let currentMaterial = "";
+    let currentSourceType = "topic";
+    let currentTopic = "";
+
+    let isGenerating = false;
+
+
+    /* ============================================================
+       HELPER - ESCAPE HTML
+       Prevents AI-generated text from breaking the page.
+       ============================================================ */
+
+    function escapeHTML(value) {
+        if (value === null || value === undefined) {
+            return "";
         }
-      ]
-    },
 
-    intermediate: {
-      title: "Machine Learning",
-      summary:
-        "Machine Learning uses algorithms to learn relationships within datasets. A typical workflow includes preprocessing, feature selection, model training, validation and evaluation. Common learning types include supervised, unsupervised and reinforcement learning.",
-      concepts: [
-        "Supervised Learning",
-        "Unsupervised Learning",
-        "Reinforcement Learning",
-        "Feature Engineering",
-        "Model Training",
-        "Validation",
-        "Overfitting",
-        "Evaluation"
-      ],
-      stages: [
-        "Problem definition",
-        "Data collection",
-        "Data preprocessing",
-        "Feature engineering",
-        "Model selection",
-        "Training",
-        "Validation",
-        "Testing",
-        "Evaluation"
-      ],
-      flashcards: [
-        {
-          q: "What is supervised learning?",
-          a: "Supervised learning learns from labelled examples where both input data and expected outputs are available."
-        },
-        {
-          q: "What is unsupervised learning?",
-          a: "Unsupervised learning discovers patterns or structures in data without labelled outputs."
-        },
-        {
-          q: "What is overfitting?",
-          a: "Overfitting occurs when a model learns the training data too closely and performs poorly on unseen data."
-        },
-        {
-          q: "What is feature engineering?",
-          a: "Feature engineering is the process of creating, selecting or transforming input features to improve model performance."
-        },
-        {
-          q: "Why is validation important?",
-          a: "Validation helps select and tune a model while reducing the risk of overfitting to the training dataset."
-        }
-      ]
-    },
-
-    advanced: {
-      title: "Machine Learning",
-      summary:
-        "Advanced Machine Learning involves designing models that generalize effectively from finite datasets. Important concerns include bias-variance trade-off, regularization, cross-validation, feature representation, optimization and reliable evaluation.",
-      concepts: [
-        "Bias-Variance Trade-off",
-        "Regularization",
-        "Cross Validation",
-        "Hyperparameters",
-        "Gradient Descent",
-        "Generalization",
-        "Model Selection",
-        "Evaluation Metrics"
-      ],
-      stages: [
-        "Problem formulation",
-        "Dataset construction",
-        "Data preprocessing",
-        "Representation learning",
-        "Model selection",
-        "Hyperparameter tuning",
-        "Cross-validation",
-        "Final training",
-        "Generalization evaluation"
-      ],
-      flashcards: [
-        {
-          q: "What is the bias-variance trade-off?",
-          a: "It describes the balance between errors caused by overly simple assumptions and errors caused by excessive sensitivity to training data."
-        },
-        {
-          q: "What is regularization?",
-          a: "Regularization adds constraints or penalties to a model to reduce overfitting and improve generalization."
-        },
-        {
-          q: "What is cross-validation?",
-          a: "Cross-validation repeatedly divides data into training and validation portions to estimate how well a model generalizes."
-        },
-        {
-          q: "What are hyperparameters?",
-          a: "Hyperparameters are settings chosen before or during training, such as learning rate, tree depth or regularization strength."
-        },
-        {
-          q: "What is generalization?",
-          a: "Generalization is the ability of a trained model to perform well on previously unseen data."
-        }
-      ]
+        return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 
-  },
 
-  "computer vision": {
+    /* ============================================================
+       HELPER - FORMAT AI TEXT
+       Converts simple AI markdown into readable HTML.
+       ============================================================ */
 
-    beginner: {
-      title: "Computer Vision",
-      summary:
-        "Computer Vision is a field of Artificial Intelligence that enables computers to understand and process images and videos.",
-      concepts: [
-        "Image",
-        "Pixel",
-        "Image Processing",
-        "Object",
-        "Edge",
-        "Feature",
-        "Classification"
-      ],
-      stages: [
-        "Capture image",
-        "Preprocess image",
-        "Extract useful information",
-        "Analyze the image",
-        "Produce the result"
-      ],
-      flashcards: [
-        {
-          q: "What is Computer Vision?",
-          a: "Computer Vision enables computers to analyze and understand images and videos."
-        },
-        {
-          q: "What is a pixel?",
-          a: "A pixel is the smallest addressable element of a digital image."
-        },
-        {
-          q: "What is image processing?",
-          a: "Image processing involves applying operations to images to improve or analyze them."
-        },
-        {
-          q: "What is edge detection?",
-          a: "Edge detection identifies strong changes in image intensity that often correspond to object boundaries."
-        },
-        {
-          q: "What is image classification?",
-          a: "Image classification assigns an image to one or more predefined categories."
+    function formatAIResponse(text) {
+        if (!text) {
+            return "";
         }
-      ]
-    },
 
-    intermediate: {
-      title: "Computer Vision",
-      summary:
-        "Computer Vision combines image processing and machine learning techniques to extract meaningful information from visual data. Common operations include filtering, segmentation, feature extraction, object detection and classification.",
-      concepts: [
-        "Filtering",
-        "Convolution",
-        "Edge Detection",
-        "Segmentation",
-        "Feature Extraction",
-        "Object Detection",
-        "Classification"
-      ],
-      stages: [
-        "Image acquisition",
-        "Preprocessing",
-        "Filtering",
-        "Feature extraction",
-        "Segmentation",
-        "Object detection",
-        "Classification"
-      ],
-      flashcards: [
-        {
-          q: "What is convolution in image processing?",
-          a: "Convolution applies a kernel or filter over image pixels to produce a transformed image."
-        },
-        {
-          q: "What is image segmentation?",
-          a: "Image segmentation divides an image into meaningful regions or objects."
-        },
-        {
-          q: "What is feature extraction?",
-          a: "Feature extraction identifies useful visual characteristics that can help a system recognize or classify objects."
-        },
-        {
-          q: "What is object detection?",
-          a: "Object detection identifies objects and usually determines their locations using bounding boxes or similar representations."
-        },
-        {
-          q: "Why is preprocessing used?",
-          a: "Preprocessing reduces noise or improves image quality before further analysis."
-        }
-      ]
-    },
+        let formatted = escapeHTML(text);
 
-    advanced: {
-      title: "Computer Vision",
-      summary:
-        "Advanced Computer Vision deals with extracting robust representations from visual data and solving tasks such as detection, segmentation, recognition and scene understanding using classical and deep learning methods.",
-      concepts: [
-        "Feature Representation",
-        "Convolutional Neural Networks",
-        "Object Detection",
-        "Semantic Segmentation",
-        "Instance Segmentation",
-        "Image Embeddings",
-        "Transfer Learning",
-        "Vision Transformers"
-      ],
-      stages: [
-        "Image acquisition",
-        "Normalization",
-        "Representation learning",
-        "Feature extraction",
-        "Model inference",
-        "Post-processing",
-        "Evaluation"
-      ],
-      flashcards: [
-        {
-          q: "What is a CNN?",
-          a: "A Convolutional Neural Network is a neural network architecture designed to learn spatial patterns from data such as images."
-        },
-        {
-          q: "What is transfer learning?",
-          a: "Transfer learning reuses knowledge learned by a model on one task or dataset to help solve another related task."
-        },
-        {
-          q: "What is semantic segmentation?",
-          a: "Semantic segmentation assigns a class label to each pixel in an image."
-        },
-        {
-          q: "What is instance segmentation?",
-          a: "Instance segmentation identifies individual object instances and assigns pixel-level regions to each instance."
-        },
-        {
-          q: "What are image embeddings?",
-          a: "Image embeddings are numerical representations that capture useful visual information in a lower-dimensional feature space."
-        }
-      ]
+        formatted = formatted.replace(
+            /^### (.*)$/gm,
+            "<h4>$1</h4>"
+        );
+
+        formatted = formatted.replace(
+            /^## (.*)$/gm,
+            "<h3>$1</h3>"
+        );
+
+        formatted = formatted.replace(
+            /^# (.*)$/gm,
+            "<h2>$1</h2>"
+        );
+
+        formatted = formatted.replace(
+            /\*\*(.*?)\*\*/g,
+            "<strong>$1</strong>"
+        );
+
+        formatted = formatted.replace(
+            /\*(.*?)\*/g,
+            "<em>$1</em>"
+        );
+
+        formatted = formatted.replace(
+            /^\s*[-•]\s+(.*)$/gm,
+            "<li>$1</li>"
+        );
+
+        formatted = formatted.replace(
+            /(<li>.*<\/li>)/gs,
+            "<ul>$1</ul>"
+        );
+
+        formatted = formatted.replace(
+            /\n{2,}/g,
+            "</p><p>"
+        );
+
+        formatted = formatted.replace(
+            /\n/g,
+            "<br>"
+        );
+
+        return "<p>" + formatted + "</p>";
     }
 
-  },
 
-  "python": {
+    /* ============================================================
+       HELPER - TRY TO PARSE JSON
+       Used later for flashcards and quiz.
+       ============================================================ */
 
-    beginner: {
-      title: "Python",
-      summary:
-        "Python is a high-level, interpreted programming language known for its simple syntax and wide range of applications.",
-      concepts: [
-        "Variables",
-        "Data Types",
-        "Operators",
-        "Conditions",
-        "Loops",
-        "Functions",
-        "Lists"
-      ],
-      stages: [
-        "Write code",
-        "Run the program",
-        "Check the output",
-        "Find errors",
-        "Improve the program"
-      ],
-      flashcards: [
-        {
-          q: "What is Python?",
-          a: "Python is a high-level, interpreted programming language known for readable syntax."
-        },
-        {
-          q: "What is a variable?",
-          a: "A variable is a name used to store or refer to a value."
-        },
-        {
-          q: "What is a list?",
-          a: "A list is an ordered, mutable collection of values in Python."
-        },
-        {
-          q: "What is a function?",
-          a: "A function is a reusable block of code designed to perform a specific task."
-        },
-        {
-          q: "What is a loop?",
-          a: "A loop repeatedly executes a block of code while a condition or sequence requires it."
+    function parseJSON(text) {
+        if (!text) {
+            return null;
         }
-      ]
-    },
 
-    intermediate: {
-      title: "Python",
-      summary:
-        "Intermediate Python programming involves functions, modules, data structures, exception handling, file handling and object-oriented programming.",
-      concepts: [
-        "Functions",
-        "Modules",
-        "Dictionaries",
-        "Exception Handling",
-        "File Handling",
-        "Classes",
-        "Objects",
-        "List Comprehension"
-      ],
-      stages: [
-        "Design the logic",
-        "Create functions",
-        "Organize modules",
-        "Handle errors",
-        "Process data",
-        "Test the program"
-      ],
-      flashcards: [
-        {
-          q: "What is exception handling?",
-          a: "Exception handling allows a program to respond to runtime errors using mechanisms such as try and except."
-        },
-        {
-          q: "What is a dictionary?",
-          a: "A dictionary stores data as key-value pairs."
-        },
-        {
-          q: "What is a class?",
-          a: "A class is a blueprint used to create objects with attributes and methods."
-        },
-        {
-          q: "What is a module?",
-          a: "A module is a Python file containing reusable code such as functions, classes or variables."
-        },
-        {
-          q: "What is list comprehension?",
-          a: "List comprehension provides a concise way to create lists using an expression and iteration."
+        if (typeof text !== "string") {
+            return text;
         }
-      ]
-    },
 
-    advanced: {
-      title: "Python",
-      summary:
-        "Advanced Python includes object-oriented design, decorators, generators, iterators, context managers, concurrency and efficient data processing.",
-      concepts: [
-        "Decorators",
-        "Generators",
-        "Iterators",
-        "Context Managers",
-        "Inheritance",
-        "Polymorphism",
-        "Concurrency",
-        "Memory Management"
-      ],
-      stages: [
-        "Design architecture",
-        "Build reusable components",
-        "Optimize execution",
-        "Handle resources",
-        "Test and profile",
-        "Deploy"
-      ],
-      flashcards: [
-        {
-          q: "What is a decorator?",
-          a: "A decorator is a callable that modifies or extends the behavior of another function or class."
-        },
-        {
-          q: "What is a generator?",
-          a: "A generator produces values lazily, typically using yield, instead of creating the entire sequence at once."
-        },
-        {
-          q: "What is polymorphism?",
-          a: "Polymorphism allows different object types to provide a common interface or behavior."
-        },
-        {
-          q: "What is a context manager?",
-          a: "A context manager controls setup and cleanup around a block of code, commonly used with the with statement."
-        },
-        {
-          q: "Why are generators useful?",
-          a: "Generators can reduce memory usage by producing values one at a time instead of storing a complete sequence."
+        let cleaned = text.trim();
+
+        /* Remove markdown code fences */
+
+        cleaned = cleaned.replace(/^```json\s*/i, "");
+        cleaned = cleaned.replace(/^```\s*/i, "");
+        cleaned = cleaned.replace(/\s*```$/i, "");
+
+        try {
+            return JSON.parse(cleaned);
+        } catch (error) {
+            /* Try to locate JSON inside the response */
+
+            const firstBrace = cleaned.indexOf("{");
+            const lastBrace = cleaned.lastIndexOf("}");
+
+            if (firstBrace !== -1 && lastBrace !== -1) {
+                try {
+                    return JSON.parse(
+                        cleaned.substring(firstBrace, lastBrace + 1)
+                    );
+                } catch (e) {
+                    /* Continue */
+                }
+            }
+
+            const firstBracket = cleaned.indexOf("[");
+            const lastBracket = cleaned.lastIndexOf("]");
+
+            if (firstBracket !== -1 && lastBracket !== -1) {
+                try {
+                    return JSON.parse(
+                        cleaned.substring(firstBracket, lastBracket + 1)
+                    );
+                } catch (e) {
+                    /* Continue */
+                }
+            }
         }
-      ]
+
+        return null;
     }
 
-  }
 
-};
+    /* ============================================================
+       HELPER - TOAST MESSAGE
+       ============================================================ */
 
+    function toast(message, type = "info") {
 
-/* =========================================================
-   GENERIC TOPIC GENERATOR
-========================================================= */
+        let existing = document.getElementById("knowviaToast");
 
-function makeGenericPack(topic, level) {
+        if (!existing) {
+            existing = document.createElement("div");
+            existing.id = "knowviaToast";
 
-  const title = topic.trim() || "Your Topic";
+            existing.style.position = "fixed";
+            existing.style.bottom = "25px";
+            existing.style.right = "25px";
+            existing.style.zIndex = "99999";
+            existing.style.maxWidth = "350px";
+            existing.style.padding = "14px 18px";
+            existing.style.borderRadius = "12px";
+            existing.style.fontSize = "14px";
+            existing.style.fontWeight = "600";
+            existing.style.boxShadow = "0 8px 30px rgba(0,0,0,0.2)";
+            existing.style.transition = "opacity 0.3s ease";
 
-  const concepts = [
-    `${title} — basic idea`,
-    `${title} — important terms`,
-    `${title} — main components`,
-    `${title} — applications`,
-    `${title} — advantages`,
-    `${title} — limitations`
-  ];
+            document.body.appendChild(existing);
+        }
 
-  const summary =
-    `${title} is an important topic that can be understood by identifying its basic definition, major concepts, components, applications, advantages and limitations. ` +
-    `At the ${level} level, focus on understanding the relationships between the important ideas and how they are applied.`;
+        existing.textContent = message;
 
-  const stages = [
-    `Understand the definition of ${title}`,
-    `Identify the important concepts`,
-    `Study the main components`,
-    `Understand practical applications`,
-    `Review advantages and limitations`,
-    `Test your understanding`
-  ];
+        if (type === "error") {
+            existing.style.background = "#dc2626";
+            existing.style.color = "#ffffff";
+        } else if (type === "success") {
+            existing.style.background = "#16a34a";
+            existing.style.color = "#ffffff";
+        } else {
+            existing.style.background = "#2563eb";
+            existing.style.color = "#ffffff";
+        }
 
-  const flashcards = [
-    {
-      q: `What is ${title}?`,
-      a: `${title} can be studied by understanding its definition, important concepts, components and practical applications.`
-    },
-    {
-      q: `What are the important concepts in ${title}?`,
-      a: `The important concepts include its basic idea, terminology, components, applications, advantages and limitations.`
-    },
-    {
-      q: `What are the applications of ${title}?`,
-      a: `${title} can be applied in different real-world or academic situations depending on its specific domain.`
-    },
-    {
-      q: `What are the advantages of ${title}?`,
-      a: `The advantages depend on the specific application, but generally include improved understanding, efficiency or problem solving.`
-    },
-    {
-      q: `What are the limitations of ${title}?`,
-      a: `The limitations depend on the context and may include complexity, resources, assumptions or practical constraints.`
-    }
-  ];
+        existing.style.opacity = "1";
 
-  return {
-    title,
-    summary,
-    concepts,
-    stages,
-    flashcards
-  };
-}
+        clearTimeout(existing._timeout);
 
-
-/* =========================================================
-   SOURCE TABS
-========================================================= */
-
-document.querySelectorAll(".source-tab").forEach(tab => {
-
-  tab.addEventListener("click", () => {
-
-    document.querySelectorAll(".source-tab")
-      .forEach(t => t.classList.remove("active"));
-
-    tab.classList.add("active");
-
-    state.source = tab.dataset.source;
-
-    document.querySelectorAll(".source-panel")
-      .forEach(panel => panel.classList.remove("active"));
-
-    const panel = $(`${state.source}Panel`);
-
-    if (panel) {
-      panel.classList.add("active");
+        existing._timeout = setTimeout(function () {
+            existing.style.opacity = "0";
+        }, 3500);
     }
 
-  });
 
-});
+    /* ============================================================
+       HELPER - BUSY STATE
+       ============================================================ */
 
+    function setBusy(button, busy, busyText = "Working...") {
 
-/* =========================================================
-   THEME TOGGLE
-========================================================= */
+        if (!button) {
+            return;
+        }
 
-if ($("themeBtn")) {
+        if (busy) {
 
-  $("themeBtn").addEventListener("click", () => {
+            if (!button.dataset.originalText) {
+                button.dataset.originalText = button.textContent;
+            }
 
-    document.body.classList.toggle("dark");
+            button.disabled = true;
+            button.textContent = busyText;
 
-    $("themeBtn").textContent =
-      document.body.classList.contains("dark")
-        ? "☀"
-        : "☾";
+        } else {
 
-  });
+            button.disabled = false;
 
-}
-
-
-/* =========================================================
-   PDF UPLOAD
-========================================================= */
-
-if ($("pdfInput")) {
-
-  $("pdfInput").addEventListener("change", async (event) => {
-
-    const file = event.target.files[0];
-
-    if (!file) return;
-
-    $("pdfInfo").textContent =
-      `Reading ${file.name}...`;
-
-    try {
-
-      const arrayBuffer = await file.arrayBuffer();
-
-      const pdf = await pdfjsLib
-        .getDocument({ data: arrayBuffer })
-        .promise;
-
-      let text = "";
-
-      for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
-
-        const page = await pdf.getPage(pageNo);
-
-        const content = await page.getTextContent();
-
-        const pageText = content.items
-          .map(item => item.str)
-          .join(" ");
-
-        text += pageText + "\n";
-
-      }
-
-      state.material = text.trim();
-
-      state.title =
-        file.name.replace(/\.[^/.]+$/, "");
-
-      state.extracted = true;
-
-      $("pdfInfo").textContent =
-        `✓ ${pdf.numPages} page(s) extracted successfully`;
-
-    } catch (error) {
-
-      console.error(error);
-
-      $("pdfInfo").textContent =
-        "Unable to read this PDF.";
-
+            if (button.dataset.originalText) {
+                button.textContent = button.dataset.originalText;
+            }
+        }
     }
 
-  });
 
-}
+    /* ============================================================
+       MAIN AI FUNCTION
+       Sends requests to:
+       
+       /api/chat
+
+       IMPORTANT:
+       The OpenAI API key is NEVER stored in this JavaScript file.
+
+       It remains safely inside Vercel environment variables.
+       ============================================================ */
+
+    async function callKnowviaAI(payload) {
+
+        try {
+
+            const response = await fetch("/api/chat", {
+
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify(payload)
+
+            });
 
 
-/* =========================================================
-   HANDWRITTEN IMAGE OCR
-========================================================= */
+            let data;
 
-if ($("imageInput")) {
+            try {
+                data = await response.json();
+            } catch (error) {
 
-  $("imageInput").addEventListener("change", async (event) => {
-
-    const file = event.target.files[0];
-
-    if (!file) return;
-
-    if ($("imagePreview")) {
-
-      $("imagePreview").src =
-        URL.createObjectURL(file);
-
-      $("imagePreview").style.display =
-        "block";
-
-    }
-
-    $("statusMessage").textContent =
-      "Reading handwritten notes...";
-
-    try {
-
-      const result = await Tesseract.recognize(
-        file,
-        "eng",
-        {
-          logger: info => {
-
-            if (info.status === "recognizing text") {
-
-              const progress =
-                Math.round(info.progress * 100);
-
-              $("statusMessage").textContent =
-                `Reading handwriting... ${progress}%`;
+                throw new Error(
+                    "The AI server returned an invalid response."
+                );
 
             }
 
-          }
+
+            if (!response.ok) {
+
+                throw new Error(
+                    data.error ||
+                    data.message ||
+                    "AI request failed."
+                );
+
+            }
+
+
+            if (!data.success) {
+
+                throw new Error(
+                    data.error ||
+                    "AI could not generate the requested content."
+                );
+
+            }
+
+
+            return data.answer || "";
+
+        } catch (error) {
+
+            console.error("Knowvia AI Error:", error);
+
+            throw error;
         }
-      );
-
-      state.material =
-        result.data.text.trim();
-
-      state.title =
-        file.name.replace(/\.[^/.]+$/, "");
-
-      state.extracted = true;
-
-      $("statusMessage").textContent =
-        "✓ Handwritten notes extracted successfully.";
-
-    } catch (error) {
-
-      console.error(error);
-
-      $("statusMessage").textContent =
-        "Unable to read the handwritten image.";
-
     }
 
-  });
 
-}
+    /* ============================================================
+       CREATE SOURCE CONTROL UI
+       
+       The current HTML does not need to be manually changed.
+       This JavaScript creates the controls automatically.
+       ============================================================ */
 
+    function createSourceControls() {
 
-/* =========================================================
-   MATERIAL EXTRACTION
-========================================================= */
-
-function extractConcepts(text) {
-
-  if (!text) return [];
-
-  const stopWords = new Set([
-
-    "the",
-    "and",
-    "for",
-    "that",
-    "this",
-    "with",
-    "from",
-    "are",
-    "was",
-    "were",
-    "have",
-    "has",
-    "into",
-    "about",
-    "which",
-    "their",
-    "there",
-    "these",
-    "those",
-    "using",
-    "used",
-    "also",
-    "can",
-    "will",
-    "such",
-    "than",
-    "then",
-    "they",
-    "them",
-    "its",
-    "our",
-    "your",
-    "you",
-    "not",
-    "but",
-    "between",
-    "each",
-    "more",
-    "other",
-    "some",
-    "very",
-    "when",
-    "where",
-    "how",
-    "what",
-    "why",
-    "who"
-  ]);
-
-  const words = text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter(word =>
-      word.length > 3 &&
-      !stopWords.has(word)
-    );
-
-  const frequency = {};
-
-  words.forEach(word => {
-
-    frequency[word] =
-      (frequency[word] || 0) + 1;
-
-  });
-
-  return Object.entries(frequency)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(item => item[0]);
-}
-
-
-/* =========================================================
-   BUILD STUDY PACK FROM MATERIAL
-========================================================= */
-
-function buildFromMaterial(text) {
-
-  const cleanText =
-    text
-      .replace(/\s+/g, " ")
-      .trim();
-
-  if (!cleanText) {
-
-    return makeGenericPack(
-      "Your Notes",
-      state.difficulty
-    );
-
-  }
-
-  const sentences =
-    cleanText
-      .split(/(?<=[.!?])\s+/)
-      .filter(sentence =>
-        sentence.trim().length > 30
-      );
-
-  const concepts =
-    extractConcepts(cleanText);
-
-  const selectedSentences =
-    sentences.slice(0, 6);
-
-  const title =
-    state.title ||
-    concepts
-      .slice(0, 3)
-      .join(" ") ||
-    "Uploaded Material";
-
-  const flashcards = [];
-
-  concepts.slice(0, 5).forEach(concept => {
-
-    const related =
-      sentences.find(sentence =>
-        sentence.toLowerCase()
-          .includes(concept.toLowerCase())
-      );
-
-    flashcards.push({
-
-      q: `What is ${concept}?`,
-
-      a:
-        related ||
-        `${concept} is one of the important concepts identified in the uploaded material.`
-
-    });
-
-  });
-
-  while (flashcards.length < 5) {
-
-    const sentence =
-      selectedSentences[flashcards.length];
-
-    if (!sentence) break;
-
-    flashcards.push({
-
-      q: "What is an important point from the material?",
-
-      a: sentence
-
-    });
-
-  }
-
-  return {
-
-    title,
-
-    summary:
-      selectedSentences.length
-        ? selectedSentences.slice(0, 4).join(" ")
-        : cleanText.slice(0, 900),
-
-    concepts:
-      concepts.length
-        ? concepts
-        : ["Main idea", "Important point", "Application"],
-
-    stages: [
-      "Read the material",
-      "Identify the important concepts",
-      "Understand the main points",
-      "Review the examples",
-      "Test your understanding"
-    ],
-
-    flashcards
-
-  };
-
-}
-
-
-/* =========================================================
-   GET CURRENT STUDY PACK
-========================================================= */
-
-function getStudyPack() {
-
-  state.difficulty =
-    $("difficulty")
-      ? $("difficulty").value
-      : "beginner";
-
-  if (state.source === "notes") {
-
-    const notes =
-      $("notesInput")
-        ? $("notesInput").value.trim()
-        : "";
-
-    if (!notes) {
-
-      throw new Error(
-        "Please enter some notes first."
-      );
-
-    }
-
-    state.material = notes;
-
-    state.title = "My Notes";
-
-    return buildFromMaterial(notes);
-
-  }
-
-
-  if (
-    state.source === "image" ||
-    state.source === "pdf"
-  ) {
-
-    if (!state.material) {
-
-      throw new Error(
-        "Please upload and extract your material first."
-      );
-
-    }
-
-    return buildFromMaterial(
-      state.material
-    );
-
-  }
-
-
-  const topic =
-    $("topic")
-      ? $("topic").value.trim()
-      : "";
-
-  if (!topic) {
-
-    throw new Error(
-      "Please enter a topic first."
-    );
-
-  }
-
-  const key =
-    topic.toLowerCase();
-
-  if (
-    topicPacks[key] &&
-    topicPacks[key][state.difficulty]
-  ) {
-
-    return topicPacks[key][state.difficulty];
-
-  }
-
-  return makeGenericPack(
-    topic,
-    state.difficulty
-  );
-
-}
-
-
-/* =========================================================
-   GENERATE BUTTON
-========================================================= */
-
-if ($("generateBtn")) {
-
-  $("generateBtn").addEventListener(
-    "click",
-    () => {
-
-      try {
-
-        $("statusMessage").textContent =
-          "Generating your study material...";
-
-        const pack =
-          getStudyPack();
-
-        state.title =
-          pack.title;
-
-        state.flashcards =
-          pack.flashcards || [];
-
-        state.cardIndex = 0;
-
-        state.quiz = [];
-
-        state.quizIndex = 0;
-
-        state.score = 0;
-
-        state.answered = false;
-
-        state.wrongAnswers = [];
-
-        state.weakConcepts = [];
-
-        renderSummary(pack);
-
-        renderFlashcard();
-
-        buildQuiz(pack);
-
-        updateKnowledgeMap(pack);
-
-        updateStudyDNA();
-
-        $("statusMessage").textContent =
-          "✓ Study material generated successfully.";
-
-        document
-          .getElementById("summary")
-          ?.scrollIntoView({
-            behavior: "smooth"
-          });
-
-      } catch (error) {
-
-        $("statusMessage").textContent =
-          error.message;
-
-      }
-
-    }
-  );
-
-}
-
-
-/* =========================================================
-   SUMMARY
-========================================================= */
-
-function renderSummary(pack) {
-
-  if ($("summaryTitle")) {
-
-    $("summaryTitle").textContent =
-      pack.title;
-
-  }
-
-  if ($("summaryContent")) {
-
-    $("summaryContent").innerHTML = `
-
-      <p>${escapeHTML(pack.summary)}</p>
-
-      <h4>Important Concepts</h4>
-
-      <ul>
-
-        ${pack.concepts
-          .map(concept =>
-            `<li>${escapeHTML(concept)}</li>`
-          )
-          .join("")}
-
-      </ul>
-
-      <h4>Learning Stages</h4>
-
-      <ol>
-
-        ${pack.stages
-          .map(stage =>
-            `<li>${escapeHTML(stage)}</li>`
-          )
-          .join("")}
-
-      </ol>
-
-    `;
-
-  }
-
-  if ($("sourcePill")) {
-
-    $("sourcePill").textContent =
-      state.source === "topic"
-        ? "Topic"
-        : state.source === "notes"
-          ? "Typed Notes"
-          : state.source === "image"
-            ? "Handwritten Notes"
-            : "PDF";
-
-  }
-
-}
-
-
-/* =========================================================
-   FLASHCARDS
-========================================================= */
-
-function renderFlashcard() {
-
-  if (!state.flashcards.length) return;
-
-  const card =
-    state.flashcards[state.cardIndex];
-
-  $("cardQuestion").textContent =
-    card.q;
-
-  $("cardAnswer").textContent =
-    card.a;
-
-  $("cardProgress").textContent =
-    `${state.cardIndex + 1} / ${state.flashcards.length}`;
-
-  const flashcard =
-    $("flashcard");
-
-  if (flashcard) {
-
-    flashcard.classList.remove("flipped");
-
-  }
-
-}
-
-
-if ($("nextCard")) {
-
-  $("nextCard").addEventListener(
-    "click",
-    () => {
-
-      if (!state.flashcards.length)
-        return;
-
-      state.cardIndex =
-        (state.cardIndex + 1) %
-        state.flashcards.length;
-
-      renderFlashcard();
-
-    }
-  );
-
-}
-
-
-if ($("prevCard")) {
-
-  $("prevCard").addEventListener(
-    "click",
-    () => {
-
-      if (!state.flashcards.length)
-        return;
-
-      state.cardIndex =
-        (state.cardIndex - 1 +
-          state.flashcards.length) %
-        state.flashcards.length;
-
-      renderFlashcard();
-
-    }
-  );
-
-}
-
-
-if ($("flipCard")) {
-
-  $("flipCard").addEventListener(
-    "click",
-    () => {
-
-      $("flashcard")
-        ?.classList.toggle("flipped");
-
-    }
-  );
-
-}
-
-
-/* =========================================================
-   CONFIDENCE TRACKING
-========================================================= */
-
-document
-  .querySelectorAll("[data-confidence]")
-  .forEach(button => {
-
-    button.addEventListener(
-      "click",
-      () => {
-
-        const value =
-          Number(button.dataset.confidence);
-
-        state.confidenceData.push(value);
-
-        updateStudyDNA();
-
-      }
-    );
-
-  });
-
-
-/* =========================================================
-   QUIZ CREATION
-========================================================= */
-
-function buildQuiz(pack) {
-
-  const style =
-    $("quizStyle")
-      ? $("quizStyle").value
-      : "mixed";
-
-  state.quiz =
-    state.flashcards
-      .slice(0, 5)
-      .map((card, index) => {
-
-        let type = "mcq";
-
-        if (style === "short")
-          type = "short";
-
-        if (style === "exam")
-          type = "mcq";
-
-        if (style === "mixed") {
-
-          type =
-            index % 2 === 0
-              ? "mcq"
-              : "short";
-
-        }
-
-        return {
-          question: card.q,
-          answer: card.a,
-          concept:
-            pack.concepts[index] ||
-            `Concept ${index + 1}`,
-          type
-        };
-
-      });
-
-  state.quizIndex = 0;
-  state.score = 0;
-  state.answered = false;
-
-  renderQuiz();
-
-}
-
-
-/* =========================================================
-   QUIZ RENDER
-========================================================= */
-
-function renderQuiz() {
-
-  const container =
-    $("quizContainer");
-
-  if (!container) return;
-
-  if (!state.quiz.length) {
-
-    container.innerHTML =
-      "<p>Generate study material to start the quiz.</p>";
-
-    return;
-
-  }
-
-  if (state.quizIndex >= state.quiz.length) {
-
-    finishQuiz();
-
-    return;
-
-  }
-
-  const item =
-    state.quiz[state.quizIndex];
-
-  state.answered = false;
-
-  if (item.type === "short") {
-
-    container.innerHTML = `
-
-      <div class="quiz-question">
-
-        <span class="quiz-number">
-          Question ${state.quizIndex + 1}
-          of ${state.quiz.length}
-        </span>
-
-        <h3>
-          ${escapeHTML(item.question)}
-        </h3>
-
-        <textarea
-          id="shortAnswer"
-          placeholder="Type your answer..."
-        ></textarea>
-
-        <button
-          class="primary-btn"
-          id="submitShort"
-        >
-          Submit Answer
-        </button>
-
-      </div>
-
-    `;
-
-    $("submitShort")
-      .addEventListener(
-        "click",
-        () => {
-
-          const answer =
-            $("shortAnswer")
-              .value
-              .trim();
-
-          if (!answer) return;
-
-          checkShortAnswer(
-            answer,
-            item.answer,
-            item.concept
-          );
-
-        }
-      );
-
-    return;
-
-  }
-
-
-  const choices =
-    createChoices(
-      item.answer,
-      state.flashcards
-    );
-
-  container.innerHTML = `
-
-    <div class="quiz-question">
-
-      <span class="quiz-number">
-        Question ${state.quizIndex + 1}
-        of ${state.quiz.length}
-      </span>
-
-      <h3>
-        ${escapeHTML(item.question)}
-      </h3>
-
-      <div class="quiz-options">
-
-        ${choices.map((choice, index) => `
-
-          <button
-            class="quiz-option"
-            data-index="${index}"
-          >
-            ${escapeHTML(choice)}
-          </button>
-
-        `).join("")}
-
-      </div>
-
-    </div>
-
-  `;
-
-  container
-    .querySelectorAll(".quiz-option")
-    .forEach(button => {
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          if (state.answered)
+        if (document.getElementById("knowviaSourceControls")) {
             return;
-
-          state.answered = true;
-
-          const selected =
-            choices[
-              Number(button.dataset.index)
-            ];
-
-          checkAnswer(
-            selected,
-            item.answer,
-            item.concept
-          );
-
         }
-      );
 
-    });
 
-}
+        const generateButton =
+            document.getElementById("generateBtn");
 
+        if (!generateButton) {
+            return;
+        }
 
-/* =========================================================
-   CREATE MCQ OPTIONS
-========================================================= */
 
-function createChoices(correct, cards) {
+        const wrapper = document.createElement("div");
 
-  const choices = [correct];
+        wrapper.id = "knowviaSourceControls";
 
-  cards.forEach(card => {
+        wrapper.innerHTML = `
 
-    if (
-      card.a !== correct &&
-      choices.length < 4
-    ) {
+            <div class="knowvia-source-box">
 
-      choices.push(card.a);
+                <div class="knowvia-source-title">
+                    <span>📚</span>
+                    <span>Study Source</span>
+                </div>
 
-    }
+                <div class="knowvia-source-options">
 
-  });
+                    <button
+                        type="button"
+                        class="knowvia-source-btn active"
+                        data-source="topic">
+                        📖 Topic
+                    </button>
 
-  while (choices.length < 4) {
+                    <button
+                        type="button"
+                        class="knowvia-source-btn"
+                        data-source="notes">
+                        📝 Typed Notes
+                    </button>
 
-    choices.push(
-      "This option is not supported by the material."
-    );
+                    <button
+                        type="button"
+                        class="knowvia-source-btn"
+                        data-source="image">
+                        ✍️ Handwritten Notes
+                    </button>
 
-  }
+                    <button
+                        type="button"
+                        class="knowvia-source-btn"
+                        data-source="pdf">
+                        📄 PDF
+                    </button>
 
-  return shuffle(choices);
+                </div>
 
-}
+                <div
+                    id="knowviaNotesArea"
+                    class="knowvia-source-area"
+                    style="display:none;">
 
+                    <textarea
+                        id="knowviaNotesInput"
+                        placeholder="Paste or type your study material here..."
+                        rows="8"></textarea>
 
-/* =========================================================
-   CHECK MCQ
-========================================================= */
+                    <div class="knowvia-source-help">
+                        Paste your notes and Knowvia will create
+                        a summary, flashcards and quiz from them.
+                    </div>
 
-function checkAnswer(
-  selected,
-  correct,
-  concept
-) {
+                </div>
 
-  const container =
-    $("quizContainer");
 
-  const isCorrect =
-    selected === correct;
+                <div
+                    id="knowviaImageArea"
+                    class="knowvia-source-area"
+                    style="display:none;">
 
-  if (isCorrect) {
+                    <label class="knowvia-upload-label">
 
-    state.score++;
+                        <span class="knowvia-upload-icon">
+                            📷
+                        </span>
 
-  } else {
+                        <span>
+                            Upload handwritten notes
+                        </span>
 
-    state.wrongAnswers.push({
-      concept,
-      selected,
-      correct
-    });
+                        <input
+                            type="file"
+                            id="knowviaImageInput"
+                            accept="image/*"
+                            hidden>
 
-  }
+                    </label>
 
-  container
-    .querySelectorAll(".quiz-option")
-    .forEach(button => {
+                    <div
+                        id="knowviaImagePreview"
+                        class="knowvia-image-preview">
+                    </div>
 
-      const value =
-        button.textContent.trim();
+                    <div
+                        id="knowviaOCRStatus"
+                        class="knowvia-source-help">
+                    </div>
 
-      if (value === correct) {
+                </div>
 
-        button.classList.add("correct");
 
-      }
+                <div
+                    id="knowviaPdfArea"
+                    class="knowvia-source-area"
+                    style="display:none;">
 
-      if (
-        value === selected &&
-        !isCorrect
-      ) {
+                    <label class="knowvia-upload-label">
 
-        button.classList.add("wrong");
+                        <span class="knowvia-upload-icon">
+                            📄
+                        </span>
 
-      }
+                        <span>
+                            Upload PDF notes / study material
+                        </span>
 
-    });
+                        <input
+                            type="file"
+                            id="knowviaPdfInput"
+                            accept="application/pdf"
+                            hidden>
 
-  setTimeout(
-    () => {
+                    </label>
 
-      state.quizIndex++;
+                    <div
+                        id="knowviaPdfInfo"
+                        class="knowvia-source-help">
+                    </div>
 
-      renderQuiz();
-
-    },
-    900
-  );
-
-}
-
-
-/* =========================================================
-   SHORT ANSWER CHECK
-========================================================= */
-
-function checkShortAnswer(
-  userAnswer,
-  correctAnswer,
-  concept
-) {
-
-  const similarity =
-    wordSimilarity(
-      userAnswer,
-      correctAnswer
-    );
-
-  const isCorrect =
-    similarity >= 0.35;
-
-  if (isCorrect) {
-
-    state.score++;
-
-  } else {
-
-    state.wrongAnswers.push({
-      concept,
-      selected: userAnswer,
-      correct: correctAnswer
-    });
-
-  }
-
-  const container =
-    $("quizContainer");
-
-  container.innerHTML += `
-
-    <div class="answer-feedback">
-
-      ${
-        isCorrect
-          ? "✓ Good answer!"
-          : "✗ Review this concept."
-      }
-
-      <p>
-        Correct idea:
-        ${escapeHTML(correctAnswer)}
-      </p>
-
-    </div>
-
-  `;
-
-  setTimeout(
-    () => {
-
-      state.quizIndex++;
-
-      renderQuiz();
-
-    },
-    1200
-  );
-
-}
-
-
-/* =========================================================
-   WORD SIMILARITY
-========================================================= */
-
-function wordSimilarity(a, b) {
-
-  const clean = text =>
-    new Set(
-      text
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, "")
-        .split(/\s+/)
-        .filter(word =>
-          word.length > 2
-        )
-    );
-
-  const A = clean(a);
-  const B = clean(b);
-
-  if (!A.size || !B.size)
-    return 0;
-
-  let common = 0;
-
-  A.forEach(word => {
-
-    if (B.has(word))
-      common++;
-
-  });
-
-  return common /
-    Math.max(A.size, B.size);
-
-}
-
-
-/* =========================================================
-   FINISH QUIZ
-========================================================= */
-
-function finishQuiz() {
-
-  const total =
-    state.quiz.length;
-
-  const percentage =
-    total
-      ? Math.round(
-          (state.score / total) * 100
-        )
-      : 0;
-
-  state.weakConcepts =
-    state.wrongAnswers
-      .map(item => item.concept);
-
-  const uniqueWeak =
-    [...new Set(
-      state.weakConcepts
-    )];
-
-  const container =
-    $("quizContainer");
-
-  container.innerHTML = `
-
-    <div class="quiz-result">
-
-      <div class="score-circle">
-        ${percentage}%
-      </div>
-
-      <h3>
-        Quiz Complete
-      </h3>
-
-      <p>
-        You scored
-        <strong>
-          ${state.score}
-        </strong>
-        out of
-        <strong>
-          ${total}
-        </strong>.
-      </p>
-
-      ${
-        uniqueWeak.length
-          ? `
-            <div class="weak-result">
-
-              <strong>
-                Topics to review:
-              </strong>
-
-              <p>
-                ${uniqueWeak
-                  .map(escapeHTML)
-                  .join(", ")}
-              </p>
+                </div>
 
             </div>
-          `
-          : `
-            <p>
-              Excellent! No major weak topics detected.
-            </p>
-          `
-      }
-
-      <button
-        class="primary-btn"
-        onclick="resetQuiz()"
-      >
-        Try Again
-      </button>
-
-    </div>
-
-  `;
-
-  updateWeakTopic();
-
-  updateStudyDNA();
-
-}
+        `;
 
 
-/* =========================================================
-   RESET QUIZ
-========================================================= */
-
-function resetQuiz() {
-
-  state.quizIndex = 0;
-
-  state.score = 0;
-
-  state.wrongAnswers = [];
-
-  state.answered = false;
-
-  renderQuiz();
-
-}
-
-
-/* =========================================================
-   WEAK TOPIC DETECTOR
-========================================================= */
-
-function updateWeakTopic() {
-
-  if (!$("weakTopic"))
-    return;
-
-  if (!state.weakConcepts.length) {
-
-    $("weakTopic").innerHTML =
-      "<strong>No weak topic detected.</strong> Keep going!";
-
-    return;
-
-  }
-
-  const counts = {};
-
-  state.weakConcepts.forEach(
-    concept => {
-
-      counts[concept] =
-        (counts[concept] || 0) + 1;
-
-    }
-  );
-
-  const sorted =
-    Object.entries(counts)
-      .sort((a, b) =>
-        b[1] - a[1]
-      );
-
-  const strongestWeak =
-    sorted[0]?.[0] ||
-    "Review the material";
-
-  $("weakTopic").innerHTML = `
-
-    <strong>
-      Weakest area:
-    </strong>
-
-    <span>
-      ${escapeHTML(strongestWeak)}
-    </span>
-
-    <p>
-      Review this concept using the flashcards
-      before attempting the quiz again.
-    </p>
-
-  `;
-
-}
-
-
-/* =========================================================
-   RETRY WEAK TOPIC
-========================================================= */
-
-if ($("retryWeakBtn")) {
-
-  $("retryWeakBtn").addEventListener(
-    "click",
-    () => {
-
-      if (!state.weakConcepts.length) {
-
-        alert(
-          "No weak topics detected yet."
+        generateButton.parentNode.insertBefore(
+            wrapper,
+            generateButton
         );
 
-        return;
 
-      }
+        addSourceControlStyles();
 
-      const weakCards =
-        state.flashcards.filter(card => {
+        setupSourceControls();
+    }
 
-          return state.weakConcepts.some(
-            concept =>
-              card.q
-                .toLowerCase()
-                .includes(
-                  concept
-                    .toLowerCase()
-                )
-          );
+
+    /* ============================================================
+       SOURCE CONTROL STYLES
+       ============================================================ */
+
+    function addSourceControlStyles() {
+
+        if (document.getElementById("knowviaSourceStyles")) {
+            return;
+        }
+
+
+        const style = document.createElement("style");
+
+        style.id = "knowviaSourceStyles";
+
+        style.textContent = `
+
+            .knowvia-source-box {
+                margin: 20px 0;
+                padding: 20px;
+                border-radius: 18px;
+                border: 1px solid rgba(100,100,100,0.15);
+                background: rgba(255,255,255,0.65);
+            }
+
+            .knowvia-source-title {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 17px;
+                font-weight: 700;
+                margin-bottom: 14px;
+            }
+
+            .knowvia-source-options {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+                margin-bottom: 16px;
+            }
+
+            .knowvia-source-btn {
+                border: 1px solid rgba(100,100,100,0.2);
+                background: transparent;
+                padding: 10px 15px;
+                border-radius: 10px;
+                cursor: pointer;
+                font-weight: 600;
+                transition: 0.2s ease;
+            }
+
+            .knowvia-source-btn:hover {
+                transform: translateY(-1px);
+            }
+
+            .knowvia-source-btn.active {
+                background: #2563eb;
+                color: white;
+                border-color: #2563eb;
+            }
+
+            .knowvia-source-area {
+                margin-top: 12px;
+            }
+
+            #knowviaNotesInput {
+                width: 100%;
+                box-sizing: border-box;
+                resize: vertical;
+                padding: 14px;
+                border-radius: 12px;
+                border: 1px solid rgba(100,100,100,0.2);
+                font-family: inherit;
+                font-size: 14px;
+                background: rgba(255,255,255,0.8);
+            }
+
+            .knowvia-upload-label {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 10px;
+                min-height: 80px;
+                border: 2px dashed rgba(100,100,100,0.25);
+                border-radius: 14px;
+                cursor: pointer;
+                padding: 15px;
+                text-align: center;
+                transition: 0.2s ease;
+            }
+
+            .knowvia-upload-label:hover {
+                border-color: #2563eb;
+                background: rgba(37,99,235,0.05);
+            }
+
+            .knowvia-upload-icon {
+                font-size: 25px;
+            }
+
+            .knowvia-source-help {
+                margin-top: 10px;
+                font-size: 13px;
+                line-height: 1.5;
+                opacity: 0.75;
+            }
+
+            .knowvia-image-preview {
+                margin-top: 15px;
+                text-align: center;
+            }
+
+            .knowvia-image-preview img {
+                max-width: 100%;
+                max-height: 350px;
+                border-radius: 12px;
+                object-fit: contain;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.12);
+            }
+
+            body.dark-mode .knowvia-source-box,
+            body.dark .knowvia-source-box {
+                background: rgba(30,30,30,0.75);
+                border-color: rgba(255,255,255,0.12);
+            }
+
+            body.dark-mode #knowviaNotesInput,
+            body.dark #knowviaNotesInput {
+                background: rgba(20,20,20,0.8);
+                color: white;
+                border-color: rgba(255,255,255,0.15);
+            }
+
+            body.dark-mode .knowvia-source-btn,
+            body.dark .knowvia-source-btn {
+                color: white;
+                border-color: rgba(255,255,255,0.2);
+            }
+
+            @media (max-width: 600px) {
+
+                .knowvia-source-options {
+                    flex-direction: column;
+                }
+
+                .knowvia-source-btn {
+                    width: 100%;
+                }
+
+            }
+
+        `;
+
+        document.head.appendChild(style);
+    }
+
+
+    /* ============================================================
+       SOURCE CONTROL EVENTS
+       ============================================================ */
+
+    function setupSourceControls() {
+
+        const sourceButtons =
+            document.querySelectorAll(
+                ".knowvia-source-btn"
+            );
+
+
+        sourceButtons.forEach(function (button) {
+
+            button.addEventListener(
+                "click",
+                function () {
+
+                    sourceButtons.forEach(function (btn) {
+                        btn.classList.remove("active");
+                    });
+
+                    button.classList.add("active");
+
+                    currentSourceType =
+                        button.dataset.source;
+
+
+                    const notesArea =
+                        document.getElementById(
+                            "knowviaNotesArea"
+                        );
+
+                    const imageArea =
+                        document.getElementById(
+                            "knowviaImageArea"
+                        );
+
+                    const pdfArea =
+                        document.getElementById(
+                            "knowviaPdfArea"
+                        );
+
+
+                    if (notesArea) {
+                        notesArea.style.display =
+                            currentSourceType === "notes"
+                                ? "block"
+                                : "none";
+                    }
+
+
+                    if (imageArea) {
+                        imageArea.style.display =
+                            currentSourceType === "image"
+                                ? "block"
+                                : "none";
+                    }
+
+
+                    if (pdfArea) {
+                        pdfArea.style.display =
+                            currentSourceType === "pdf"
+                                ? "block"
+                                : "none";
+                    }
+
+
+                    if (
+                        currentSourceType === "topic"
+                    ) {
+
+                        toast(
+                            "Topic mode selected.",
+                            "info"
+                        );
+
+                    } else if (
+                        currentSourceType === "notes"
+                    ) {
+
+                        toast(
+                            "Paste your notes below.",
+                            "info"
+                        );
+
+                    } else if (
+                        currentSourceType === "image"
+                    ) {
+
+                        toast(
+                            "Upload a clear image of your handwritten notes.",
+                            "info"
+                        );
+
+                    } else if (
+                        currentSourceType === "pdf"
+                    ) {
+
+                        toast(
+                            "Upload your PDF study material.",
+                            "info"
+                        );
+
+                    }
+
+                }
+            );
 
         });
 
-      if (weakCards.length) {
 
-        state.flashcards =
-          weakCards;
+        setupImageUpload();
 
-        state.cardIndex = 0;
+        setupPDFUpload();
+    }
 
-        renderFlashcard();
 
-        document
-          .getElementById("flashcards")
-          ?.scrollIntoView({
-            behavior: "smooth"
-          });
+    /* ============================================================
+       HANDWRITTEN NOTE IMAGE UPLOAD
+       ============================================================ */
 
-      } else {
+    function setupImageUpload() {
 
-        alert(
-          "Review the highlighted weak concepts in your notes."
+        const input =
+            document.getElementById(
+                "knowviaImageInput"
+            );
+
+        if (!input) {
+            return;
+        }
+
+
+        input.addEventListener(
+            "change",
+            async function () {
+
+                const file = input.files[0];
+
+                if (!file) {
+                    return;
+                }
+
+
+                if (!file.type.startsWith("image/")) {
+
+                    toast(
+                        "Please select an image file.",
+                        "error"
+                    );
+
+                    input.value = "";
+                    return;
+                }
+
+
+                const preview =
+                    document.getElementById(
+                        "knowviaImagePreview"
+                    );
+
+                const status =
+                    document.getElementById(
+                        "knowviaOCRStatus"
+                    );
+
+
+                if (preview) {
+
+                    const imageURL =
+                        URL.createObjectURL(file);
+
+                    preview.innerHTML = `
+                        <img
+                            src="${imageURL}"
+                            alt="Handwritten notes preview">
+                    `;
+                }
+
+
+                if (status) {
+
+                    status.textContent =
+                        "Reading handwritten notes...";
+                }
+
+
+                try {
+
+                    currentMaterial =
+                        await extractTextFromImage(file);
+
+
+                    if (!currentMaterial.trim()) {
+
+                        throw new Error(
+                            "No readable text was found in the image."
+                        );
+
+                    }
+
+
+                    if (status) {
+
+                        status.textContent =
+                            "✓ Handwritten notes read successfully. " +
+                            "Knowvia can now create study material from them.";
+                    }
+
+
+                    toast(
+                        "Handwritten notes processed successfully.",
+                        "success"
+                    );
+
+
+                } catch (error) {
+
+                    console.error(
+                        "OCR Error:",
+                        error
+                    );
+
+
+                    currentMaterial = "";
+
+
+                    if (status) {
+
+                        status.textContent =
+                            "Could not read the image. " +
+                            "Try a clearer, well-lit image.";
+                    }
+
+
+                    toast(
+                        error.message ||
+                        "Could not read handwritten notes.",
+                        "error"
+                    );
+
+                }
+
+            }
+        );
+    }
+
+
+    /* ============================================================
+       LOAD TESSERACT.JS
+       
+       Tesseract is used to read text from handwritten/image notes.
+       It is loaded only when the user selects an image.
+       ============================================================ */
+
+    async function loadTesseract() {
+
+        if (window.Tesseract) {
+            return window.Tesseract;
+        }
+
+
+        return new Promise(function (resolve, reject) {
+
+            const existingScript =
+                document.querySelector(
+                    'script[data-knowvia-tesseract]'
+                );
+
+
+            if (existingScript) {
+
+                existingScript.addEventListener(
+                    "load",
+                    function () {
+                        resolve(window.Tesseract);
+                    }
+                );
+
+                existingScript.addEventListener(
+                    "error",
+                    function () {
+                        reject(
+                            new Error(
+                                "Could not load handwriting recognition."
+                            )
+                        );
+                    }
+                );
+
+                return;
+            }
+
+
+            const script =
+                document.createElement("script");
+
+            script.src =
+                "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+
+            script.async = true;
+
+            script.dataset.knowviaTesseract =
+                "true";
+
+
+            script.onload = function () {
+
+                if (window.Tesseract) {
+                    resolve(window.Tesseract);
+                } else {
+                    reject(
+                        new Error(
+                            "Handwriting recognition library loaded incorrectly."
+                        )
+                    );
+                }
+
+            };
+
+
+            script.onerror = function () {
+
+                reject(
+                    new Error(
+                        "Could not load handwriting recognition library."
+                    )
+                );
+
+            };
+
+
+            document.head.appendChild(script);
+
+        });
+    }
+
+
+    /* ============================================================
+       IMAGE → TEXT
+       ============================================================ */
+
+    async function extractTextFromImage(file) {
+
+        const Tesseract =
+            await loadTesseract();
+
+
+        if (!Tesseract) {
+
+            throw new Error(
+                "OCR library is unavailable."
+            );
+
+        }
+
+
+        const result =
+            await Tesseract.recognize(
+                file,
+                "eng",
+                {
+                    logger: function (message) {
+
+                        const status =
+                            document.getElementById(
+                                "knowviaOCRStatus"
+                            );
+
+                        if (
+                            status &&
+                            message &&
+                            message.status
+                        ) {
+
+                            const progress =
+                                message.progress
+                                    ? Math.round(
+                                        message.progress * 100
+                                    )
+                                    : 0;
+
+                            status.textContent =
+                                "Reading notes... " +
+                                progress +
+                                "%";
+
+                        }
+
+                    }
+                }
+            );
+
+
+        if (
+            !result ||
+            !result.data ||
+            !result.data.text
+        ) {
+
+            return "";
+        }
+
+
+        return result.data.text.trim();
+    }
+
+
+    /* ============================================================
+       PDF UPLOAD
+       ============================================================ */
+
+    function setupPDFUpload() {
+
+        const input =
+            document.getElementById(
+                "knowviaPdfInput"
+            );
+
+        if (!input) {
+            return;
+        }
+
+
+        input.addEventListener(
+            "change",
+            async function () {
+
+                const file = input.files[0];
+
+                if (!file) {
+                    return;
+                }
+
+
+                if (
+                    file.type !==
+                    "application/pdf"
+                ) {
+
+                    toast(
+                        "Please select a PDF file.",
+                        "error"
+                    );
+
+                    input.value = "";
+
+                    return;
+                }
+
+
+                const info =
+                    document.getElementById(
+                        "knowviaPdfInfo"
+                    );
+
+
+                if (info) {
+
+                    info.textContent =
+                        "Reading PDF...";
+                }
+
+
+                try {
+
+                    currentMaterial =
+                        await extractTextFromPDF(file);
+
+
+                    if (!currentMaterial.trim()) {
+
+                        throw new Error(
+                            "No readable text was found in this PDF."
+                        );
+
+                    }
+
+
+                    if (info) {
+
+                        info.innerHTML =
+                            `
+                            <strong>✓ PDF processed</strong><br>
+                            ${escapeHTML(file.name)}
+                            <br>
+                            ${currentMaterial.length.toLocaleString()}
+                            characters extracted.
+                            `;
+                    }
+
+
+                    toast(
+                        "PDF processed successfully.",
+                        "success"
+                    );
+
+
+                } catch (error) {
+
+                    console.error(
+                        "PDF Error:",
+                        error
+                    );
+
+
+                    currentMaterial = "";
+
+
+                    if (info) {
+
+                        info.textContent =
+                            error.message ||
+                            "Could not read this PDF.";
+                    }
+
+
+                    toast(
+                        error.message ||
+                        "Could not process the PDF.",
+                        "error"
+                    );
+
+                }
+
+            }
+        );
+    }
+
+
+    /* ============================================================
+       LOAD PDF.JS
+       
+       PDF.js extracts selectable text from PDF pages.
+       ============================================================ */
+
+    async function loadPDFJS() {
+
+        if (window.pdfjsLib) {
+            return window.pdfjsLib;
+        }
+
+
+        return new Promise(function (resolve, reject) {
+
+            const existingScript =
+                document.querySelector(
+                    'script[data-knowvia-pdfjs]'
+                );
+
+
+            if (existingScript) {
+
+                existingScript.addEventListener(
+                    "load",
+                    function () {
+
+                        if (window.pdfjsLib) {
+                            resolve(window.pdfjsLib);
+                        } else {
+                            reject(
+                                new Error(
+                                    "PDF reader loaded incorrectly."
+                                )
+                            );
+                        }
+
+                    }
+                );
+
+
+                existingScript.addEventListener(
+                    "error",
+                    function () {
+
+                        reject(
+                            new Error(
+                                "Could not load the PDF reader."
+                            )
+                        );
+
+                    }
+                );
+
+                return;
+            }
+
+
+            const script =
+                document.createElement("script");
+
+
+            script.src =
+                "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+
+
+            script.async = true;
+
+            script.dataset.knowviaPdfjs =
+                "true";
+
+
+            script.onload = function () {
+
+                if (!window.pdfjsLib) {
+
+                    reject(
+                        new Error(
+                            "PDF reader is unavailable."
+                        )
+                    );
+
+                    return;
+                }
+
+
+                try {
+
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+                        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+                } catch (error) {
+
+                    console.warn(
+                        "Could not configure PDF worker.",
+                        error
+                    );
+
+                }
+
+
+                resolve(
+                    window.pdfjsLib
+                );
+
+            };
+
+
+            script.onerror = function () {
+
+                reject(
+                    new Error(
+                        "Could not load PDF.js."
+                    )
+                );
+
+            };
+
+
+            document.head.appendChild(script);
+
+        });
+    }
+
+
+    /* ============================================================
+       PDF → TEXT
+       
+       Reads text from every page.
+       ============================================================ */
+
+    async function extractTextFromPDF(file) {
+
+        const pdfjsLib =
+            await loadPDFJS();
+
+
+        const arrayBuffer =
+            await file.arrayBuffer();
+
+
+        const typedArray =
+            new Uint8Array(
+                arrayBuffer
+            );
+
+
+        const pdf =
+            await pdfjsLib.getDocument(
+                {
+                    data: typedArray
+                }
+            ).promise;
+
+
+        let completeText = "";
+
+
+        for (
+            let pageNumber = 1;
+            pageNumber <= pdf.numPages;
+            pageNumber++
+        ) {
+
+            const page =
+                await pdf.getPage(
+                    pageNumber
+                );
+
+
+            const textContent =
+                await page.getTextContent();
+
+
+            const pageText =
+                textContent.items
+                    .map(function (item) {
+                        return item.str || "";
+                    })
+                    .join(" ");
+
+
+            completeText +=
+                "\n\n--- Page " +
+                pageNumber +
+                " ---\n\n" +
+                pageText;
+
+
+            const info =
+                document.getElementById(
+                    "knowviaPdfInfo"
+                );
+
+
+            if (info) {
+
+                info.textContent =
+                    "Reading PDF page " +
+                    pageNumber +
+                    " of " +
+                    pdf.numPages +
+                    "...";
+
+            }
+
+        }
+
+
+        return completeText.trim();
+    }
+
+
+    /* ============================================================
+       GET CURRENT STUDY MATERIAL
+       
+       Decides what should be sent to the AI.
+       ============================================================ */
+
+    function getStudyMaterial() {
+
+        if (
+            currentSourceType === "topic"
+        ) {
+
+            return "";
+
+        }
+
+
+        if (
+            currentSourceType === "notes"
+        ) {
+
+            const notesInput =
+                document.getElementById(
+                    "knowviaNotesInput"
+                );
+
+
+            if (!notesInput) {
+                return "";
+            }
+
+
+            return notesInput.value.trim();
+
+        }
+
+
+        if (
+            currentSourceType === "image"
+        ) {
+
+            return currentMaterial.trim();
+
+        }
+
+
+        if (
+            currentSourceType === "pdf"
+        ) {
+
+            return currentMaterial.trim();
+
+        }
+
+
+        return "";
+    }
+
+
+    /* ============================================================
+       BUILD AI CONTEXT
+       
+       This is used by the remaining parts of app.js.
+       ============================================================ */
+
+    function buildAIContext() {
+
+        const difficulty =
+            difficultyInput
+                ? difficultyInput.value
+                : "beginner";
+
+
+        const topic =
+            topicInput
+                ? topicInput.value.trim()
+                : "";
+
+
+        const material =
+            getStudyMaterial();
+
+
+        return {
+
+            topic: topic,
+
+            difficulty: difficulty,
+
+            material: material,
+
+            sourceType: currentSourceType
+
+        };
+    }
+
+
+    /* ============================================================
+       INITIALIZE SOURCE CONTROLS
+       ============================================================ */
+
+    createSourceControls();
+
+
+    /* ============================================================
+       BASIC THEME BUTTON
+       
+       The complete dark-mode behavior will be enhanced in Part 3.
+       ============================================================ */
+
+    if (themeBtn) {
+
+        themeBtn.addEventListener(
+            "click",
+            function () {
+
+                document.body.classList.toggle(
+                    "dark-mode"
+                );
+
+                document.body.classList.toggle(
+                    "dark"
+                );
+
+
+                const isDark =
+                    document.body.classList.contains(
+                        "dark-mode"
+                    );
+
+
+                themeBtn.textContent =
+                    isDark
+                        ? "☀"
+                        : "◐";
+
+            }
         );
 
-      }
-
     }
-  );
-
-}
 
 
-/* =========================================================
-   STUDY DNA
-========================================================= */
-
-function updateStudyDNA() {
-
-  if (!$("dnaText"))
-    return;
-
-  const confidence =
-    state.confidenceData.length
-      ? average(state.confidenceData)
-      : 2;
-
-  const quizAccuracy =
-    state.quiz.length
-      ? state.score /
-        state.quiz.length
-      : 0;
-
-  const understanding =
-    Math.round(
-      quizAccuracy * 100
-    );
-
-  const recall =
-    Math.round(
-      (confidence / 3) * 100
-    );
-
-  const application =
-    state.wrongAnswers.length
-      ? Math.max(
-          20,
-          100 -
-          state.wrongAnswers.length * 15
-        )
-      : 85;
-
-  setBar(
-    "understandingBar",
-    understanding
-  );
-
-  setBar(
-    "recallBar",
-    recall
-  );
-
-  setBar(
-    "applicationBar",
-    application
-  );
-
-  let profile =
-    "Balanced Learner";
-
-  if (understanding >= 80)
-    profile = "Strong Performer";
-
-  if (
-    understanding < 60 &&
-    recall < 60
-  )
-    profile = "Foundation Builder";
-
-  if (
-    recall >= 80 &&
-    understanding < 60
-  )
-    profile = "Confidence-First Learner";
-
-  if (
-    understanding >= 80 &&
-    recall < 60
-  )
-    profile = "Practice-Driven Learner";
-
-  $("dnaText").innerHTML = `
-
-    <strong>
-      ${profile}
-    </strong>
-
-    <p>
-      Your current learning pattern is based on
-      quiz accuracy, flashcard confidence and
-      performance feedback.
-    </p>
-
-  `;
-
-}
+  
 
 
-/* =========================================================
-   KNOWLEDGE MAP
-========================================================= */
+    /* ============================================================
+       EXPOSE IMPORTANT FUNCTIONS
+       
+       Parts 2 and 3 can use these functions safely.
+       ============================================================ */
 
-function updateKnowledgeMap(pack) {
+    window.Knowvia = {
 
-  if (!$("knowledgeMap"))
-    return;
+        callAI: callKnowviaAI,
 
-  $("knowledgeMap").innerHTML = `
+        formatAIResponse: formatAIResponse,
 
-    <div class="knowledge-center">
+        parseJSON: parseJSON,
 
-      ${escapeHTML(pack.title)}
+        escapeHTML: escapeHTML,
 
-    </div>
+        toast: toast,
 
-    <div class="knowledge-branches">
+        setBusy: setBusy,
 
-      ${pack.concepts
-        .map(
-          concept => `
+        buildAIContext: buildAIContext,
 
-            <div class="knowledge-node">
+        getStudyMaterial: getStudyMaterial,
 
-              ${escapeHTML(concept)}
+        extractTextFromPDF: extractTextFromPDF,
 
-            </div>
+        extractTextFromImage: extractTextFromImage,
 
-          `
-        )
-        .join("")}
-
-    </div>
-
-  `;
-
-}
-
-
-/* =========================================================
-   TEACH ME
-========================================================= */
-
-if ($("teachBtn")) {
-
-  $("teachBtn").addEventListener("click", async () => {
-
-    const topic = state.title || "the selected topic";
-    const material = state.material || "";
-
-    openModal(`
-      <h2>🤖 Teach Me: ${escapeHTML(topic)}</h2>
-
-      <div class="teach-loading">
-        <p>✨ AI is preparing a simple explanation...</p>
-      </div>
-    `);
-
-    try {
-
-      const prompt = `
-You are an expert but friendly study teacher.
-
-Teach the student about: "${topic}"
-
-Difficulty level: ${state.difficulty}
-
-Study material:
-${material || "No additional study material was provided."}
-
-Explain the topic in a very easy-to-understand way.
-
-Follow this structure:
-
-1. What is it?
-2. Why is it important?
-3. Main concepts
-4. How it works
-5. Simple real-world example
-6. Common mistake students make
-7. Exam tip
-8. One question for the student to answer
-
-Use simple language suitable for a B.Tech student.
-Use headings and bullet points.
-Do not make the explanation unnecessarily long.
-`;
-
-      const response = await fetch("/api/chat", {
-
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json"
+        get currentSource() {
+            return currentSourceType;
         },
 
-        body: JSON.stringify({
-          prompt: prompt
+        get currentMaterial() {
+            return currentMaterial;
+        },
+
+        get currentTopic() {
+            return currentTopic;
+        }
+
+    };
+
+
+})();
+/* ============================================================
+   KNOWVIA - PART 2
+   AI SUMMARY + FLASHCARDS + QUIZ
+   ============================================================ */
+
+
+/* ============================================================
+   STUDY PACK STATE
+   ============================================================ */
+
+let studySummary = "";
+let studyFlashcards = [];
+let studyQuiz = [];
+
+let quizScore = 0;
+let quizAnswered = false;
+
+
+/* ============================================================
+   SHOW LOADING MESSAGE
+   ============================================================ */
+
+function showStudyLoading(message) {
+
+    if (summaryContent) {
+
+        summaryContent.innerHTML = `
+            <div class="knowvia-loading">
+
+                <div class="knowvia-spinner"></div>
+
+                <h3>${escapeHTML(message)}</h3>
+
+                <p>
+                    Knowvia AI is preparing your study material...
+                </p>
+
+            </div>
+        `;
+
+    }
+
+}
+
+
+/* ============================================================
+   GENERATE AI SUMMARY
+   ============================================================ */
+
+async function generateAISummary(context) {
+
+    const answer =
+        await callKnowviaAI({
+
+            task: "summary",
+
+            topic: context.topic,
+
+            difficulty: context.difficulty,
+
+            material: context.material
+
+        });
+
+
+    if (!answer || !answer.trim()) {
+
+        throw new Error(
+            "AI returned an empty summary."
+        );
+
+    }
+
+
+    return answer.trim();
+}
+
+
+/* ============================================================
+   NORMALIZE FLASHCARDS
+   ============================================================ */
+
+function normalizeFlashcards(data) {
+
+    let cards = data;
+
+
+    /*
+     * Sometimes AI may return:
+     *
+     * {
+     *   "flashcards": [...]
+     * }
+     *
+     * Handle that format too.
+     */
+
+    if (
+        data &&
+        !Array.isArray(data) &&
+        Array.isArray(data.flashcards)
+    ) {
+
+        cards = data.flashcards;
+
+    }
+
+
+    if (!Array.isArray(cards)) {
+
+        return [];
+
+    }
+
+
+    return cards
+        .map(function (card) {
+
+            if (!card) {
+                return null;
+            }
+
+
+            const question =
+                card.question ||
+                card.front ||
+                card.q ||
+                "";
+
+
+            const answer =
+                card.answer ||
+                card.back ||
+                card.a ||
+                "";
+
+
+            if (
+                !String(question).trim() ||
+                !String(answer).trim()
+            ) {
+
+                return null;
+
+            }
+
+
+            return {
+
+                question:
+                    String(question).trim(),
+
+                answer:
+                    String(answer).trim()
+
+            };
+
         })
-
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "AI request failed");
-      }
-
-      openModal(`
-        <h2>🤖 Teach Me: ${escapeHTML(topic)}</h2>
-
-        <div class="ai-response">
-          ${formatAIResponse(data.answer)}
-        </div>
-      `);
-
-    } catch (error) {
-
-      console.error(error);
-
-      openModal(`
-        <h2>⚠️ AI Connection Error</h2>
-
-        <p>
-          Knowvia could not connect to the AI service.
-        </p>
-
-        <p class="muted">
-          Please check your Vercel deployment and
-          OPENAI_API_KEY environment variable.
-        </p>
-      `);
-
-    }
-
-  });
-
-}
-
-/* =========================================================
-   STUDY SESSION
-========================================================= */
-
-if ($("sessionBtn")) {
-
-  $("sessionBtn").addEventListener(
-    "click",
-    () => {
-
-      openModal(`
-
-        <h2>
-          25-Minute Knowvia Study Session
-        </h2>
-
-        <div class="session-plan">
-
-          <div>
-            <strong>10 min</strong>
-            <span>Learn the summary</span>
-          </div>
-
-          <div>
-            <strong>5 min</strong>
-            <span>Review flashcards</span>
-          </div>
-
-          <div>
-            <strong>5 min</strong>
-            <span>Take the quiz</span>
-          </div>
-
-          <div>
-            <strong>3 min</strong>
-            <span>Review weak areas</span>
-          </div>
-
-          <div>
-            <strong>2 min</strong>
-            <span>Explain aloud</span>
-          </div>
-
-        </div>
-
-        <p>
-          The goal is active learning rather than
-          simply reading the material repeatedly.
-        </p>
-
-      `);
-
-    }
-  );
+        .filter(Boolean);
 
 }
 
 
-/* =========================================================
-   EXAM MODE
-========================================================= */
+/* ============================================================
+   GENERATE AI FLASHCARDS
+   ============================================================ */
 
-if ($("examBtn")) {
+async function generateAIFlashcards(context) {
 
-  $("examBtn").addEventListener(
-    "click",
-    () => {
+    const answer =
+        await callKnowviaAI({
 
-      const title =
-        state.title ||
-        "Your Topic";
+            task: "flashcards",
 
-      openModal(`
+            topic: context.topic,
 
-        <h2>
-          Exam Mode
-        </h2>
+            difficulty: context.difficulty,
 
-        <p>
-          Practice ${escapeHTML(title)}
-          using different answer lengths.
-        </p>
+            material: context.material
 
-        <div class="exam-card">
+        });
 
-          <strong>2-Mark Question</strong>
 
-          <p>
-            Define ${escapeHTML(title)}
-            and state one important point.
-          </p>
+    let parsed =
+        parseJSON(answer);
 
-        </div>
 
-        <div class="exam-card">
+    /*
+     * If the AI response is not directly JSON,
+     * try to extract it.
+     */
 
-          <strong>5-Mark Question</strong>
+    if (!parsed) {
 
-          <p>
-            Explain the main concepts of
-            ${escapeHTML(title)}
-            with suitable examples.
-          </p>
+        const match =
+            answer.match(
+                /\[[\s\S]*\]/
+            );
 
-        </div>
 
-        <div class="exam-card">
+        if (match) {
 
-          <strong>10-Mark Question</strong>
+            parsed =
+                parseJSON(match[0]);
 
-          <p>
-            Explain ${escapeHTML(title)}
-            in detail, including its concepts,
-            stages, applications, advantages
-            and limitations.
-          </p>
-
-        </div>
-
-      `);
+        }
 
     }
-  );
+
+
+    const cards =
+        normalizeFlashcards(parsed);
+
+
+    /*
+     * Fallback:
+     *
+     * If the model accidentally returns normal text,
+     * create one useful flashcard from the response.
+     */
+
+    if (
+        cards.length === 0 &&
+        answer.trim()
+    ) {
+
+        return [
+
+            {
+
+                question:
+                    "What are the important points about " +
+                    (
+                        context.topic ||
+                        "this study material"
+                    ) +
+                    "?",
+
+                answer:
+                    answer.trim()
+
+            }
+
+        ];
+
+    }
+
+
+    return cards;
 
 }
 
 
-/* =========================================================
-   ASK MY NOTES
-========================================================= */
+/* ============================================================
+   NORMALIZE QUIZ
+   ============================================================ */
 
-if ($("notesAskBtn")) {
+function normalizeQuiz(data) {
 
-  $("notesAskBtn").addEventListener(
-    "click",
-    () => {
+    let questions = data;
 
-      openModal(`
 
-        <h2>
-          Ask My Notes
-        </h2>
+    /*
+     * Handle:
+     *
+     * {
+     *   "quiz": [...]
+     * }
+     */
 
-        <input
-          id="notesQuestion"
-          class="modal-input"
-          placeholder="Ask something from your notes..."
-        />
+    if (
+        data &&
+        !Array.isArray(data) &&
+        Array.isArray(data.quiz)
+    ) {
 
-        <button
-          class="primary-btn"
-          id="askNotesSubmit"
-        >
-          Ask
-        </button>
-
-        <div
-          id="notesAnswer"
-          class="notes-answer"
-        ></div>
-
-      `);
-
-      $("askNotesSubmit")
-        .addEventListener(
-          "click",
-          askNotes
-        );
+        questions =
+            data.quiz;
 
     }
-  );
+
+
+    if (!Array.isArray(questions)) {
+
+        return [];
+
+    }
+
+
+    return questions
+        .map(function (question) {
+
+            if (!question) {
+                return null;
+            }
+
+
+            const text =
+                question.question ||
+                question.q ||
+                "";
+
+
+            let options =
+                question.options ||
+                question.choices ||
+                [];
+
+
+            if (!Array.isArray(options)) {
+
+                options =
+                    Object.values(options);
+
+            }
+
+
+            options =
+                options
+                    .map(function (option) {
+                        return String(option);
+                    })
+                    .filter(function (option) {
+                        return option.trim() !== "";
+                    });
+
+
+            let correctAnswer =
+                question.correctAnswer;
+
+
+            if (
+                correctAnswer === undefined
+            ) {
+
+                correctAnswer =
+                    question.answer;
+
+            }
+
+
+            if (
+                correctAnswer === undefined
+            ) {
+
+                correctAnswer =
+                    question.correct;
+
+            }
+
+
+            /*
+             * AI may return the correct answer as:
+             *
+             * 0
+             * 1
+             * 2
+             * 3
+             *
+             * or:
+             *
+             * "A"
+             * "B"
+             * "C"
+             * "D"
+             *
+             * or the actual answer text.
+             */
+
+
+            let correctIndex =
+                Number(correctAnswer);
+
+
+            if (
+                !Number.isInteger(correctIndex) ||
+                correctIndex < 0 ||
+                correctIndex >= options.length
+            ) {
+
+                correctIndex = -1;
+
+            }
+
+
+            if (correctIndex === -1) {
+
+                const letters = [
+                    "A",
+                    "B",
+                    "C",
+                    "D",
+                    "E"
+                ];
+
+
+                const answerString =
+                    String(
+                        correctAnswer || ""
+                    ).trim();
+
+
+                const letterIndex =
+                    letters.indexOf(
+                        answerString.toUpperCase()
+                    );
+
+
+                if (
+                    letterIndex >= 0 &&
+                    letterIndex < options.length
+                ) {
+
+                    correctIndex =
+                        letterIndex;
+
+                }
+
+            }
+
+
+            if (correctIndex === -1) {
+
+                const answerString =
+                    String(
+                        correctAnswer || ""
+                    ).trim()
+                    .toLowerCase();
+
+
+                const foundIndex =
+                    options.findIndex(
+                        function (option) {
+
+                            return (
+                                option
+                                    .trim()
+                                    .toLowerCase() ===
+                                answerString
+                            );
+
+                        }
+                    );
+
+
+                if (foundIndex >= 0) {
+
+                    correctIndex =
+                        foundIndex;
+
+                }
+
+            }
+
+
+            /*
+             * Some AI responses use:
+             *
+             * correctAnswer: "2"
+             *
+             * which Number() already handles.
+             */
+
+
+            if (
+                !String(text).trim() ||
+                options.length < 2
+            ) {
+
+                return null;
+
+            }
+
+
+            return {
+
+                question:
+                    String(text).trim(),
+
+                options:
+                    options,
+
+                correctIndex:
+                    correctIndex,
+
+                explanation:
+                    String(
+                        question.explanation ||
+                        question.reason ||
+                        ""
+                    ).trim()
+
+            };
+
+        })
+        .filter(Boolean);
 
 }
 
 
-/* =========================================================
-   ASK NOTES FUNCTION
-========================================================= */
+/* ============================================================
+   GENERATE AI QUIZ
+   ============================================================ */
 
-function askNotes() {
+async function generateAIQuiz(context) {
 
-  const question =
-    $("notesQuestion")
-      ?.value
-      .trim();
+    const answer =
+        await callKnowviaAI({
 
-  if (!question) return;
+            task: "quiz",
 
-  const text =
-    state.material ||
-    $("notesInput")?.value ||
-    "";
+            topic: context.topic,
 
-  if (!text) {
+            difficulty: context.difficulty,
 
-    $("notesAnswer").innerHTML =
-      "<p>No notes are available yet.</p>";
+            material: context.material
 
-    return;
+        });
 
-  }
 
-  const words =
-    question
-      .toLowerCase()
-      .split(/\s+/)
-      .filter(word =>
-        word.length > 3
-      );
+    let parsed =
+        parseJSON(answer);
 
-  const sentences =
-    text
-      .replace(/\s+/g, " ")
-      .split(/(?<=[.!?])\s+/);
 
-  const matches =
-    sentences
-      .filter(sentence => {
+    if (!parsed) {
 
-        const lower =
-          sentence.toLowerCase();
+        const match =
+            answer.match(
+                /\[[\s\S]*\]/
+            );
 
-        return words.some(word =>
-          lower.includes(word)
-        );
 
-      })
-      .slice(0, 4);
+        if (match) {
 
-  if (!matches.length) {
+            parsed =
+                parseJSON(match[0]);
 
-    $("notesAnswer").innerHTML = `
+        }
 
-      <p>
-        I couldn't find a closely matching
-        sentence in the uploaded material.
-      </p>
+    }
+
+
+    return normalizeQuiz(parsed);
+
+}
+
+
+/* ============================================================
+   RENDER SUMMARY
+   ============================================================ */
+
+function renderSummary(summary) {
+
+    if (!summaryContent) {
+        return;
+    }
+
+
+    summaryContent.innerHTML = `
+
+        <div class="knowvia-ai-summary">
+
+            <div class="knowvia-ai-badge">
+                🤖 AI Generated
+            </div>
+
+            <div class="knowvia-summary-text">
+                ${formatAIResponse(summary)}
+            </div>
+
+        </div>
 
     `;
 
-    return;
-
-  }
-
-  $("notesAnswer").innerHTML = `
-
-    <strong>
-      Relevant information from your notes:
-    </strong>
-
-    <ul>
-
-      ${matches
-        .map(
-          sentence =>
-            `<li>${escapeHTML(sentence)}</li>`
-        )
-        .join("")}
-
-    </ul>
-
-  `;
-
 }
 
 
-/* =========================================================
-   MODAL
-========================================================= */
+/* ============================================================
+   FLASHCARD DISPLAY
+   ============================================================ */
 
-function openModal(content) {
+function showFlashcard() {
 
-  if (!$("modal"))
-    return;
-
-  $("modalContent").innerHTML =
-    content;
-
-  $("modal").classList.add("show");
-
-}
+    if (!flashcard) {
+        return;
+    }
 
 
-if ($("modalClose")) {
+    if (
+        !studyFlashcards ||
+        studyFlashcards.length === 0
+    ) {
 
-  $("modalClose").addEventListener(
-    "click",
-    () => {
+        if (cardQuestion) {
 
-      $("modal").classList.remove(
-        "show"
-      );
+            cardQuestion.textContent =
+                "No flashcards available.";
+
+        }
+
+
+        if (cardAnswer) {
+
+            cardAnswer.textContent =
+                "Try generating the study material again.";
+
+        }
+
+
+        if (cardProgress) {
+
+            cardProgress.textContent =
+                "Card 0 / 0";
+
+        }
+
+
+        return;
 
     }
-  );
-
-}
 
 
-if ($("modal")) {
+    const card =
+        studyFlashcards[
+            currentCardIndex
+        ];
 
-  $("modal").addEventListener(
-    "click",
-    event => {
 
-      if (
-        event.target === $("modal")
-      ) {
+    if (!card) {
+        return;
+    }
 
-        $("modal").classList.remove(
-          "show"
-        );
 
-      }
+    if (cardQuestion) {
+
+        cardQuestion.innerHTML =
+            formatAIResponse(
+                card.question
+            );
 
     }
-  );
-
-}
 
 
-/* =========================================================
-   TOAST
-========================================================= */
+    if (cardAnswer) {
 
-function showToast(message) {
+        cardAnswer.innerHTML =
+            formatAIResponse(
+                card.answer
+            );
 
-  if (!$("toast"))
-    return;
-
-  $("toast").textContent =
-    message;
-
-  $("toast").classList.add("show");
-
-  setTimeout(
-    () => {
-
-      $("toast").classList.remove(
-        "show"
-      );
-
-    },
-    2200
-  );
-
-}
+    }
 
 
-/* =========================================================
-   UTILITIES
-========================================================= */
+    if (cardProgress) {
 
-function shuffle(array) {
+        cardProgress.textContent =
+            "Card " +
+            (currentCardIndex + 1) +
+            " / " +
+            studyFlashcards.length;
 
-  const copy =
-    [...array];
-
-  for (
-    let i = copy.length - 1;
-    i > 0;
-    i--
-  ) {
-
-    const j =
-      Math.floor(
-        Math.random() *
-        (i + 1)
-      );
-
-    [
-      copy[i],
-      copy[j]
-    ] =
-    [
-      copy[j],
-      copy[i]
-    ];
-
-  }
-
-  return copy;
-
-}
+    }
 
 
-function average(values) {
-
-  if (!values.length)
-    return 0;
-
-  return values.reduce(
-    (sum, value) =>
-      sum + value,
-    0
-  ) / values.length;
-
-}
-
-
-function setBar(id, percentage) {
-
-  const element =
-    $(id);
-
-  if (!element)
-    return;
-
-  element.style.width =
-    `${Math.max(
-      0,
-      Math.min(
-        100,
-        percentage
-      )
-    )}%`;
-
-}
-
-
-function escapeHTML(value) {
-
-  return String(value)
-    .replace(
-      /&/g,
-      "&amp;"
-    )
-    .replace(
-      /</g,
-      "&lt;"
-    )
-    .replace(
-      />/g,
-      "&gt;"
-    )
-    .replace(
-      /"/g,
-      "&quot;"
-    )
-    .replace(
-      /'/g,
-      "&#039;"
+    flashcard.classList.remove(
+        "flipped"
     );
 
 }
 
 
-/* =========================================================
-   INITIAL STATE
-========================================================= */
+/* ============================================================
+   FLASHCARD - NEXT
+   ============================================================ */
 
-document.addEventListener(
-  "DOMContentLoaded",
-  () => {
+function nextFlashcard() {
 
-    if ($("statusMessage")) {
+    if (
+        studyFlashcards.length === 0
+    ) {
 
-      $("statusMessage").textContent =
-        "Choose a topic or upload your study material.";
+        return;
 
     }
 
-    if ($("topic")) {
 
-      $("topic").addEventListener(
+    currentCardIndex++;
+
+
+    if (
+        currentCardIndex >=
+        studyFlashcards.length
+    ) {
+
+        currentCardIndex = 0;
+
+    }
+
+
+    showFlashcard();
+
+}
+
+
+/* ============================================================
+   FLASHCARD - PREVIOUS
+   ============================================================ */
+
+function previousFlashcard() {
+
+    if (
+        studyFlashcards.length === 0
+    ) {
+
+        return;
+
+    }
+
+
+    currentCardIndex--;
+
+
+    if (currentCardIndex < 0) {
+
+        currentCardIndex =
+            studyFlashcards.length - 1;
+
+    }
+
+
+    showFlashcard();
+
+}
+
+
+/* ============================================================
+   FLASHCARD - FLIP
+   ============================================================ */
+
+function flipCurrentFlashcard() {
+
+    if (!flashcard) {
+        return;
+    }
+
+
+    flashcard.classList.toggle(
+        "flipped"
+    );
+
+}
+
+
+/* ============================================================
+   SETUP FLASHCARD BUTTONS
+   ============================================================ */
+
+function setupFlashcardControls() {
+
+    if (nextCard) {
+
+        nextCard.addEventListener(
+            "click",
+            nextFlashcard
+        );
+
+    }
+
+
+    if (prevCard) {
+
+        prevCard.addEventListener(
+            "click",
+            previousFlashcard
+        );
+
+    }
+
+
+    if (flipCard) {
+
+        flipCard.addEventListener(
+            "click",
+            flipCurrentFlashcard
+        );
+
+    }
+
+
+    /*
+     * Allow clicking the flashcard itself
+     * to flip it.
+     */
+
+    if (flashcard) {
+
+        flashcard.addEventListener(
+            "click",
+            function () {
+
+                flipCurrentFlashcard();
+
+            }
+        );
+
+    }
+
+}
+
+
+/* ============================================================
+   RENDER QUIZ
+   ============================================================ */
+
+function renderQuiz() {
+
+    if (!quizContainer) {
+        return;
+    }
+
+
+    currentQuizIndex = 0;
+
+    quizScore = 0;
+
+    currentQuizAnswers =
+        new Array(
+            studyQuiz.length
+        ).fill(null);
+
+
+    if (
+        !studyQuiz ||
+        studyQuiz.length === 0
+    ) {
+
+        quizContainer.innerHTML = `
+
+            <div class="knowvia-empty-quiz">
+
+                <div style="font-size:40px;">
+                    📝
+                </div>
+
+                <h3>
+                    Quiz could not be loaded
+                </h3>
+
+                <p>
+                    Please generate the study material again.
+                </p>
+
+            </div>
+
+        `;
+
+        return;
+
+    }
+
+
+    renderQuizQuestion();
+
+}
+
+
+/* ============================================================
+   RENDER CURRENT QUIZ QUESTION
+   ============================================================ */
+
+function renderQuizQuestion() {
+
+    if (!quizContainer) {
+        return;
+    }
+
+
+    const question =
+        studyQuiz[
+            currentQuizIndex
+        ];
+
+
+    if (!question) {
+
+        showQuizResult();
+
+        return;
+
+    }
+
+
+    const total =
+        studyQuiz.length;
+
+
+    const progress =
+        currentQuizIndex + 1;
+
+
+    quizContainer.innerHTML = `
+
+        <div class="knowvia-quiz-card">
+
+            <div class="knowvia-quiz-header">
+
+                <span>
+                    Question ${progress} of ${total}
+                </span>
+
+                <span>
+                    Score: ${quizScore}
+                </span>
+
+            </div>
+
+
+            <div class="knowvia-quiz-progress">
+
+                <div
+                    class="knowvia-quiz-progress-bar"
+                    style="width:${(progress / total) * 100}%;">
+                </div>
+
+            </div>
+
+
+            <h3 class="knowvia-question">
+
+                ${escapeHTML(
+                    question.question
+                )}
+
+            </h3>
+
+
+            <div class="knowvia-options">
+
+                ${question.options
+                    .map(
+                        function (
+                            option,
+                            index
+                        ) {
+
+                            return `
+
+                                <button
+                                    type="button"
+                                    class="knowvia-option"
+                                    data-index="${index}">
+
+                                    <span class="knowvia-option-letter">
+                                        ${String.fromCharCode(
+                                            65 + index
+                                        )}
+                                    </span>
+
+                                    <span>
+                                        ${escapeHTML(
+                                            option
+                                        )}
+                                    </span>
+
+                                </button>
+
+                            `;
+
+                        }
+                    )
+                    .join("")}
+
+            </div>
+
+
+            <div
+                id="knowviaQuizFeedback"
+                class="knowvia-quiz-feedback">
+            </div>
+
+
+            <div class="knowvia-quiz-actions">
+
+                <button
+                    type="button"
+                    id="knowviaNextQuestion"
+                    class="knowvia-next-question"
+                    disabled>
+
+                    ${
+                        progress === total
+                            ? "Finish Quiz"
+                            : "Next Question"
+                    }
+
+                </button>
+
+            </div>
+
+        </div>
+
+    `;
+
+
+    const options =
+        quizContainer.querySelectorAll(
+            ".knowvia-option"
+        );
+
+
+    options.forEach(
+        function (button) {
+
+            button.addEventListener(
+                "click",
+                function () {
+
+                    answerQuizQuestion(
+                        Number(
+                            button.dataset.index
+                        )
+                    );
+
+                }
+            );
+
+        }
+    );
+
+
+    const nextButton =
+        document.getElementById(
+            "knowviaNextQuestion"
+        );
+
+
+    if (nextButton) {
+
+        nextButton.addEventListener(
+            "click",
+            function () {
+
+                currentQuizIndex++;
+
+                if (
+                    currentQuizIndex >=
+                    studyQuiz.length
+                ) {
+
+                    showQuizResult();
+
+                } else {
+
+                    renderQuizQuestion();
+
+                }
+
+            }
+        );
+
+    }
+
+}
+
+
+/* ============================================================
+   ANSWER QUIZ QUESTION
+   ============================================================ */
+
+function answerQuizQuestion(selectedIndex) {
+
+    if (quizAnswered) {
+        return;
+    }
+
+
+    quizAnswered = true;
+
+
+    const question =
+        studyQuiz[
+            currentQuizIndex
+        ];
+
+
+    if (!question) {
+        return;
+    }
+
+
+    currentQuizAnswers[
+        currentQuizIndex
+    ] = selectedIndex;
+
+
+    const isCorrect =
+        selectedIndex ===
+        question.correctIndex;
+
+
+    if (isCorrect) {
+
+        quizScore++;
+
+    }
+
+
+    const options =
+        quizContainer.querySelectorAll(
+            ".knowvia-option"
+        );
+
+
+    options.forEach(
+        function (button, index) {
+
+            button.disabled = true;
+
+
+            if (
+                index ===
+                question.correctIndex
+            ) {
+
+                button.classList.add(
+                    "correct"
+                );
+
+            }
+
+
+            if (
+                index === selectedIndex &&
+                !isCorrect
+            ) {
+
+                button.classList.add(
+                    "wrong"
+                );
+
+            }
+
+        }
+    );
+
+
+    const feedback =
+        document.getElementById(
+            "knowviaQuizFeedback"
+        );
+
+
+    if (feedback) {
+
+        if (isCorrect) {
+
+            feedback.innerHTML = `
+
+                <div class="knowvia-correct-message">
+
+                    ✓ Correct!
+
+                </div>
+
+                ${
+                    question.explanation
+                        ? `
+                            <div class="knowvia-explanation">
+                                ${formatAIResponse(
+                                    question.explanation
+                                )}
+                            </div>
+                        `
+                        : ""
+                }
+
+            `;
+
+        } else {
+
+            const correctAnswer =
+                question.correctIndex >= 0
+                    ? question.options[
+                        question.correctIndex
+                    ]
+                    : "See the correct option above.";
+
+
+            feedback.innerHTML = `
+
+                <div class="knowvia-wrong-message">
+
+                    ✗ Not quite.
+
+                </div>
+
+                <div class="knowvia-correct-answer">
+
+                    Correct answer:
+                    <strong>
+                        ${escapeHTML(
+                            correctAnswer
+                        )}
+                    </strong>
+
+                </div>
+
+                ${
+                    question.explanation
+                        ? `
+                            <div class="knowvia-explanation">
+                                ${formatAIResponse(
+                                    question.explanation
+                                )}
+                            </div>
+                        `
+                        : ""
+                }
+
+            `;
+
+        }
+
+    }
+
+
+    const nextButton =
+        document.getElementById(
+            "knowviaNextQuestion"
+        );
+
+
+    if (nextButton) {
+
+        nextButton.disabled = false;
+
+    }
+
+
+    /*
+     * Reset for the next question only when
+     * the user actually moves forward.
+     */
+
+    setTimeout(
+        function () {
+
+            quizAnswered = false;
+
+        },
+        100
+    );
+
+}
+
+
+/* ============================================================
+   QUIZ RESULT
+   ============================================================ */
+
+function showQuizResult() {
+
+    if (!quizContainer) {
+        return;
+    }
+
+
+    const total =
+        studyQuiz.length;
+
+
+    const percentage =
+        total > 0
+            ? Math.round(
+                (quizScore / total) * 100
+            )
+            : 0;
+
+
+    let message = "";
+
+
+    if (percentage >= 90) {
+
+        message =
+            "Excellent! You have a strong understanding of this topic.";
+
+    } else if (percentage >= 75) {
+
+        message =
+            "Great work! You understand most of the important concepts.";
+
+    } else if (percentage >= 50) {
+
+        message =
+            "Good attempt. Review the concepts you missed and try again.";
+
+    } else {
+
+        message =
+            "Keep practicing. Go through the summary and flashcards once more.";
+
+    }
+
+
+    quizContainer.innerHTML = `
+
+        <div class="knowvia-quiz-result">
+
+            <div class="knowvia-result-icon">
+                ${
+                    percentage >= 75
+                        ? "🎉"
+                        : percentage >= 50
+                            ? "👍"
+                            : "📚"
+                }
+            </div>
+
+
+            <h2>
+                Quiz Completed!
+            </h2>
+
+
+            <div class="knowvia-score-circle">
+
+                <strong>
+                    ${percentage}%
+                </strong>
+
+                <span>
+                    ${quizScore} / ${total}
+                </span>
+
+            </div>
+
+
+            <p class="knowvia-result-message">
+                ${escapeHTML(message)}
+            </p>
+
+
+            <div class="knowvia-result-actions">
+
+                <button
+                    type="button"
+                    id="knowviaRetryQuiz">
+
+                    🔄 Retry Quiz
+
+                </button>
+
+            </div>
+
+        </div>
+
+    `;
+
+
+    const retryButton =
+        document.getElementById(
+            "knowviaRetryQuiz"
+        );
+
+
+    if (retryButton) {
+
+        retryButton.addEventListener(
+            "click",
+            function () {
+
+                renderQuiz();
+
+            }
+        );
+
+    }
+
+}
+
+
+/* ============================================================
+   CREATE AI STUDY PACK
+   ============================================================ */
+
+async function generateCompleteStudyPack() {
+
+    if (isGenerating) {
+        return;
+    }
+
+
+    const context =
+        buildAIContext();
+
+
+    /*
+     * Validate input.
+     */
+
+    if (
+        !context.topic &&
+        !context.material
+    ) {
+
+        toast(
+            "Enter a topic or provide study material first.",
+            "error"
+        );
+
+        return;
+
+    }
+
+
+    /*
+     * For material modes, make sure
+     * actual material exists.
+     */
+
+    if (
+        context.sourceType !== "topic" &&
+        !context.material
+    ) {
+
+        if (
+            context.sourceType === "notes"
+        ) {
+
+            toast(
+                "Please type or paste your notes first.",
+                "error"
+            );
+
+        } else if (
+            context.sourceType === "image"
+        ) {
+
+            toast(
+                "Please upload handwritten notes first.",
+                "error"
+            );
+
+        } else if (
+            context.sourceType === "pdf"
+        ) {
+
+            toast(
+                "Please upload a PDF first.",
+                "error"
+            );
+
+        }
+
+
+        return;
+
+    }
+
+
+    isGenerating = true;
+
+
+    setBusy(
+        generateBtn,
+        true,
+        "Generating..."
+    );
+
+
+    /*
+     * Store current context.
+     */
+
+    currentTopic =
+        context.topic;
+
+
+    currentMaterial =
+        context.material;
+
+
+    /*
+     * Reset previous content.
+     */
+
+    studySummary = "";
+
+    studyFlashcards = [];
+
+    studyQuiz = [];
+
+    currentFlashcards = [];
+
+    currentCardIndex = 0;
+
+
+    showStudyLoading(
+        "Generating your AI study pack..."
+    );
+
+
+    /*
+     * Hide/prepare old sections.
+     */
+
+    if (flashcardsSection) {
+
+        flashcardsSection.style.display =
+            "block";
+
+    }
+
+
+    if (quizSection) {
+
+        quizSection.style.display =
+            "block";
+
+    }
+
+
+    try {
+
+        /*
+         * Run the three AI tasks together.
+         *
+         * This makes generation faster than
+         * waiting for each request separately.
+         */
+
+        const results =
+            await Promise.all([
+
+                generateAISummary(
+                    context
+                ),
+
+                generateAIFlashcards(
+                    context
+                ),
+
+                generateAIQuiz(
+                    context
+                )
+
+            ]);
+
+
+        studySummary =
+            results[0];
+
+
+        studyFlashcards =
+            results[1];
+
+
+        studyQuiz =
+            results[2];
+
+
+        /*
+         * Keep compatibility with the
+         * original flashcard variables.
+         */
+
+        currentFlashcards =
+            studyFlashcards;
+
+
+        currentCardIndex = 0;
+
+
+        /*
+         * Render summary.
+         */
+
+        renderSummary(
+            studySummary
+        );
+
+
+        /*
+         * Render flashcards.
+         */
+
+        showFlashcard();
+
+
+        /*
+         * Render quiz.
+         */
+
+        renderQuiz();
+
+
+        /*
+         * Scroll to summary.
+         */
+
+        if (summarySection) {
+
+            summarySection.scrollIntoView({
+                behavior: "smooth",
+                block: "start"
+            });
+
+        }
+
+
+        toast(
+            "Your AI study pack is ready! 🎉",
+            "success"
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            "Study Pack Error:",
+            error
+        );
+
+
+        if (summaryContent) {
+
+            summaryContent.innerHTML = `
+
+                <div class="knowvia-error-state">
+
+                    <div style="font-size:40px;">
+                        ⚠️
+                    </div>
+
+                    <h3>
+                        AI generation failed
+                    </h3>
+
+                    <p>
+                        ${
+                            escapeHTML(
+                                error.message ||
+                                "Something went wrong."
+                            )
+                        }
+                    </p>
+
+                    <p>
+                        Please check your Vercel deployment
+                        and OpenAI API configuration.
+                    </p>
+
+                </div>
+
+            `;
+
+        }
+
+
+        toast(
+            error.message ||
+            "Could not generate study material.",
+            "error"
+        );
+
+
+    } finally {
+
+        isGenerating = false;
+
+
+        setBusy(
+            generateBtn,
+            false
+        );
+
+    }
+
+}
+
+
+/* ============================================================
+   GENERATE BUTTON
+   ============================================================ */
+
+if (generateBtn) {
+
+    generateBtn.addEventListener(
+        "click",
+        generateCompleteStudyPack
+    );
+
+}
+
+
+/* ============================================================
+   SETUP FLASHCARD CONTROLS
+   ============================================================ */
+
+setupFlashcardControls();
+
+
+/* ============================================================
+   ADD AI STUDY PACK STYLES
+   ============================================================ */
+
+function addStudyPackStyles() {
+
+    if (
+        document.getElementById(
+            "knowviaStudyPackStyles"
+        )
+    ) {
+
+        return;
+
+    }
+
+
+    const style =
+        document.createElement("style");
+
+
+    style.id =
+        "knowviaStudyPackStyles";
+
+
+    style.textContent = `
+
+        /* =========================================
+           LOADING
+           ========================================= */
+
+        .knowvia-loading {
+            text-align: center;
+            padding: 45px 20px;
+        }
+
+
+        .knowvia-spinner {
+            width: 42px;
+            height: 42px;
+            margin: 0 auto 20px;
+            border: 4px solid rgba(100,100,100,0.2);
+            border-top-color: #2563eb;
+            border-radius: 50%;
+            animation: knowviaSpin 0.8s linear infinite;
+        }
+
+
+        @keyframes knowviaSpin {
+
+            to {
+                transform: rotate(360deg);
+            }
+
+        }
+
+
+        /* =========================================
+           AI BADGE
+           ========================================= */
+
+        .knowvia-ai-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 11px;
+            border-radius: 20px;
+            background: rgba(37,99,235,0.1);
+            color: #2563eb;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 15px;
+        }
+
+
+        .knowvia-summary-text {
+            line-height: 1.75;
+        }
+
+
+        .knowvia-summary-text h2,
+        .knowvia-summary-text h3,
+        .knowvia-summary-text h4 {
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+
+        .knowvia-summary-text ul {
+            padding-left: 25px;
+        }
+
+
+        /* =========================================
+           QUIZ
+           ========================================= */
+
+        .knowvia-quiz-card {
+            padding: 22px;
+            border-radius: 18px;
+            border: 1px solid rgba(100,100,100,0.15);
+            background: rgba(255,255,255,0.7);
+        }
+
+
+        .knowvia-quiz-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+
+        .knowvia-quiz-progress {
+            height: 7px;
+            background: rgba(100,100,100,0.12);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 25px;
+        }
+
+
+        .knowvia-quiz-progress-bar {
+            height: 100%;
+            background: #2563eb;
+            border-radius: 10px;
+            transition: width 0.3s ease;
+        }
+
+
+        .knowvia-question {
+            font-size: 20px;
+            line-height: 1.5;
+            margin-bottom: 22px;
+        }
+
+
+        .knowvia-options {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+
+        .knowvia-option {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+            padding: 14px 16px;
+            border: 1px solid rgba(100,100,100,0.2);
+            background: transparent;
+            border-radius: 12px;
+            text-align: left;
+            cursor: pointer;
+            font-size: 15px;
+            transition: 0.2s ease;
+        }
+
+
+        .knowvia-option:hover:not(:disabled) {
+            border-color: #2563eb;
+            transform: translateY(-1px);
+        }
+
+
+        .knowvia-option:disabled {
+            cursor: default;
+        }
+
+
+        .knowvia-option.correct {
+            border-color: #16a34a;
+            background: rgba(22,163,74,0.1);
+        }
+
+
+        .knowvia-option.wrong {
+            border-color: #dc2626;
+            background: rgba(220,38,38,0.1);
+        }
+
+
+        .knowvia-option-letter {
+            width: 30px;
+            height: 30px;
+            min-width: 30px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: rgba(100,100,100,0.1);
+            font-weight: 700;
+        }
+
+
+        .knowvia-quiz-feedback {
+            margin-top: 18px;
+        }
+
+
+        .knowvia-correct-message {
+            color: #16a34a;
+            font-weight: 800;
+            font-size: 17px;
+        }
+
+
+        .knowvia-wrong-message {
+            color: #dc2626;
+            font-weight: 800;
+            font-size: 17px;
+        }
+
+
+        .knowvia-correct-answer {
+            margin-top: 8px;
+            line-height: 1.5;
+        }
+
+
+        .knowvia-explanation {
+            margin-top: 10px;
+            padding: 12px;
+            border-radius: 10px;
+            background: rgba(100,100,100,0.06);
+            line-height: 1.6;
+        }
+
+
+        .knowvia-quiz-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+
+        .knowvia-next-question {
+            padding: 11px 18px;
+            border: none;
+            border-radius: 10px;
+            background: #2563eb;
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+
+        .knowvia-next-question:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+
+        /* =========================================
+           QUIZ RESULT
+           ========================================= */
+
+        .knowvia-quiz-result {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+
+        .knowvia-result-icon {
+            font-size: 50px;
+            margin-bottom: 10px;
+        }
+
+
+        .knowvia-score-circle {
+            width: 130px;
+            height: 130px;
+            margin: 25px auto;
+            border-radius: 50%;
+            border: 8px solid rgba(37,99,235,0.15);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+
+        .knowvia-score-circle strong {
+            font-size: 30px;
+        }
+
+
+        .knowvia-score-circle span {
+            font-size: 13px;
+            opacity: 0.7;
+        }
+
+
+        .knowvia-result-message {
+            max-width: 550px;
+            margin: 0 auto 25px;
+            line-height: 1.6;
+        }
+
+
+        .knowvia-result-actions button {
+            border: none;
+            padding: 12px 20px;
+            border-radius: 10px;
+            background: #2563eb;
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+
+        /* =========================================
+           ERROR
+           ========================================= */
+
+        .knowvia-error-state {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+
+        .knowvia-error-state h3 {
+            margin-top: 10px;
+        }
+
+
+        .knowvia-error-state p {
+            line-height: 1.6;
+        }
+
+
+        /* =========================================
+           DARK MODE
+           ========================================= */
+
+        body.dark-mode .knowvia-quiz-card,
+        body.dark .knowvia-quiz-card {
+
+            background: rgba(25,25,25,0.8);
+
+            border-color:
+                rgba(255,255,255,0.12);
+
+        }
+
+
+        body.dark-mode .knowvia-option,
+        body.dark .knowvia-option {
+
+            color: white;
+
+            border-color:
+                rgba(255,255,255,0.18);
+
+        }
+
+
+        body.dark-mode .knowvia-explanation,
+        body.dark .knowvia-explanation {
+
+            background:
+                rgba(255,255,255,0.06);
+
+        }
+
+
+        body.dark-mode .knowvia-quiz-progress,
+        body.dark .knowvia-quiz-progress {
+
+            background:
+                rgba(255,255,255,0.12);
+
+        }
+
+
+        /* =========================================
+           MOBILE
+           ========================================= */
+
+        @media (max-width: 600px) {
+
+            .knowvia-quiz-card {
+                padding: 16px;
+            }
+
+
+            .knowvia-question {
+                font-size: 18px;
+            }
+
+
+            .knowvia-quiz-header {
+                font-size: 12px;
+            }
+
+        }
+
+    `;
+
+
+    document.head.appendChild(style);
+
+}
+
+
+addStudyPackStyles();
+
+
+/* ============================================================
+   END PART 2
+   ============================================================ */
+/* ============================================================
+   KNOWVIA - PART 3
+   TEACH ME + STUDY SESSION + EXAM MODE
+   ASK MY NOTES + WEAK TOPIC DETECTOR
+   EXPLAIN MY MISTAKE + FINAL UI
+   ============================================================ */
+
+
+/* ============================================================
+   ADVANCED FEATURE STATE
+   ============================================================ */
+
+let lastQuizResult = null;
+
+let weakTopics = [];
+
+let studySessionData = null;
+
+let examData = null;
+
+let askNotesHistory = [];
+
+
+/* ============================================================
+   CREATE FEATURE BUTTONS
+   ============================================================ */
+
+function createAdvancedFeatureButtons() {
+
+    if (
+        document.getElementById(
+            "knowviaAdvancedFeatures"
+        )
+    ) {
+
+        return;
+    }
+
+
+    const container =
+        document.createElement("div");
+
+
+    container.id =
+        "knowviaAdvancedFeatures";
+
+
+    container.innerHTML = `
+
+        <div class="knowvia-feature-heading">
+
+            <span>✨</span>
+
+            <div>
+
+                <h2>
+                    AI Study Tools
+                </h2>
+
+                <p>
+                    Go beyond summaries and flashcards.
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <div class="knowvia-feature-grid">
+
+            <button
+                type="button"
+                class="knowvia-feature-card"
+                data-feature="teach">
+
+                <span class="knowvia-feature-icon">
+                    👨‍🏫
+                </span>
+
+                <strong>
+                    Teach Me
+                </strong>
+
+                <small>
+                    Learn step-by-step
+                </small>
+
+            </button>
+
+
+            <button
+                type="button"
+                class="knowvia-feature-card"
+                data-feature="session">
+
+                <span class="knowvia-feature-icon">
+                    ⏱️
+                </span>
+
+                <strong>
+                    Study Session
+                </strong>
+
+                <small>
+                    Guided learning session
+                </small>
+
+            </button>
+
+
+            <button
+                type="button"
+                class="knowvia-feature-card"
+                data-feature="exam">
+
+                <span class="knowvia-feature-icon">
+                    📝
+                </span>
+
+                <strong>
+                    Exam Mode
+                </strong>
+
+                <small>
+                    Practice exam questions
+                </small>
+
+            </button>
+
+
+            <button
+                type="button"
+                class="knowvia-feature-card"
+                data-feature="ask">
+
+                <span class="knowvia-feature-icon">
+                    💬
+                </span>
+
+                <strong>
+                    Ask My Notes
+                </strong>
+
+                <small>
+                    Ask questions from your material
+                </small>
+
+            </button>
+
+
+            <button
+                type="button"
+                class="knowvia-feature-card"
+                data-feature="weak">
+
+                <span class="knowvia-feature-icon">
+                    🎯
+                </span>
+
+                <strong>
+                    Weak Topic Detector
+                </strong>
+
+                <small>
+                    Find what needs practice
+                </small>
+
+            </button>
+
+
+            <button
+                type="button"
+                class="knowvia-feature-card"
+                data-feature="mistake">
+
+                <span class="knowvia-feature-icon">
+                    ❌
+                </span>
+
+                <strong>
+                    Explain My Mistake
+                </strong>
+
+                <small>
+                    Understand wrong answers
+                </small>
+
+            </button>
+
+        </div>
+
+    `;
+
+
+    /*
+     * Put advanced features after quiz.
+     */
+
+    if (quizSection) {
+
+        quizSection.parentNode.insertBefore(
+            container,
+            quizSection.nextSibling
+        );
+
+    } else if (summarySection) {
+
+        summarySection.parentNode.insertBefore(
+            container,
+            summarySection.nextSibling
+        );
+
+    } else {
+
+        document.body.appendChild(
+            container
+        );
+
+    }
+
+
+    setupAdvancedFeatureEvents();
+
+}
+
+
+/* ============================================================
+   FEATURE BUTTON EVENTS
+   ============================================================ */
+
+function setupAdvancedFeatureEvents() {
+
+    const buttons =
+        document.querySelectorAll(
+            ".knowvia-feature-card"
+        );
+
+
+    buttons.forEach(
+        function (button) {
+
+            button.addEventListener(
+                "click",
+                function () {
+
+                    const feature =
+                        button.dataset.feature;
+
+
+                    handleAdvancedFeature(
+                        feature
+                    );
+
+                }
+            );
+
+        }
+    );
+
+}
+
+
+/* ============================================================
+   HANDLE ADVANCED FEATURE
+   ============================================================ */
+
+async function handleAdvancedFeature(
+    feature
+) {
+
+    const context =
+        buildAIContext();
+
+
+    if (
+        !context.topic &&
+        !context.material
+    ) {
+
+        toast(
+            "Generate study material first.",
+            "error"
+        );
+
+        return;
+    }
+
+
+    if (feature === "teach") {
+
+        await openTeachMe(
+            context
+        );
+
+        return;
+
+    }
+
+
+    if (feature === "session") {
+
+        await openStudySession(
+            context
+        );
+
+        return;
+
+    }
+
+
+    if (feature === "exam") {
+
+        await openExamMode(
+            context
+        );
+
+        return;
+
+    }
+
+
+    if (feature === "ask") {
+
+        openAskMyNotes(
+            context
+        );
+
+        return;
+
+    }
+
+
+    if (feature === "weak") {
+
+        await openWeakTopicDetector(
+            context
+        );
+
+        return;
+
+    }
+
+
+    if (feature === "mistake") {
+
+        openExplainMistake(
+            context
+        );
+
+        return;
+
+    }
+
+}
+
+
+/* ============================================================
+   MODAL CREATOR
+   ============================================================ */
+
+function createKnowviaModal(
+    title,
+    icon = "✨"
+) {
+
+    const existing =
+        document.getElementById(
+            "knowviaModal"
+        );
+
+
+    if (existing) {
+
+        existing.remove();
+
+    }
+
+
+    const modal =
+        document.createElement("div");
+
+
+    modal.id =
+        "knowviaModal";
+
+
+    modal.className =
+        "knowvia-modal";
+
+
+    modal.innerHTML = `
+
+        <div class="knowvia-modal-overlay"></div>
+
+
+        <div
+            class="knowvia-modal-window"
+            role="dialog"
+            aria-modal="true">
+
+            <div class="knowvia-modal-header">
+
+                <div class="knowvia-modal-title">
+
+                    <span>
+                        ${icon}
+                    </span>
+
+                    <h2>
+                        ${escapeHTML(title)}
+                    </h2>
+
+                </div>
+
+
+                <button
+                    type="button"
+                    class="knowvia-modal-close"
+                    id="knowviaModalClose">
+
+                    ×
+
+                </button>
+
+            </div>
+
+
+            <div
+                id="knowviaModalBody"
+                class="knowvia-modal-body">
+
+            </div>
+
+        </div>
+
+    `;
+
+
+    document.body.appendChild(
+        modal
+    );
+
+
+    const closeButton =
+        document.getElementById(
+            "knowviaModalClose"
+        );
+
+
+    const overlay =
+        modal.querySelector(
+            ".knowvia-modal-overlay"
+        );
+
+
+    if (closeButton) {
+
+        closeButton.addEventListener(
+            "click",
+            closeKnowviaModal
+        );
+
+    }
+
+
+    if (overlay) {
+
+        overlay.addEventListener(
+            "click",
+            closeKnowviaModal
+        );
+
+    }
+
+
+    document.addEventListener(
         "keydown",
-        event => {
+        function handleEscape(event) {
 
-          if (
-            event.key === "Enter"
-          ) {
+            if (
+                event.key === "Escape" &&
+                document.getElementById(
+                    "knowviaModal"
+                )
+            ) {
+
+                closeKnowviaModal();
+
+            }
+
+        },
+        {
+            once: true
+        }
+    );
+
+
+    return modal;
+
+}
+
+
+/* ============================================================
+   CLOSE MODAL
+   ============================================================ */
+
+function closeKnowviaModal() {
+
+    const modal =
+        document.getElementById(
+            "knowviaModal"
+        );
+
+
+    if (modal) {
+
+        modal.remove();
+
+    }
+
+}
+
+
+/* ============================================================
+   TEACH ME
+   ============================================================ */
+
+async function openTeachMe(
+    context
+) {
+
+    const modal =
+        createKnowviaModal(
+            "Teach Me",
+            "👨‍🏫"
+        );
+
+
+    const body =
+        modal.querySelector(
+            "#knowviaModalBody"
+        );
+
+
+    body.innerHTML = `
+
+        <div class="knowvia-feature-loading">
+
+            <div class="knowvia-spinner"></div>
+
+            <h3>
+                Your AI teacher is preparing...
+            </h3>
+
+            <p>
+                Knowvia will explain the topic step-by-step
+                at the selected difficulty level.
+            </p>
+
+        </div>
+
+    `;
+
+
+    try {
+
+        const answer =
+            await callKnowviaAI({
+
+                task: "teach",
+
+                topic:
+                    context.topic,
+
+                difficulty:
+                    context.difficulty,
+
+                material:
+                    context.material
+
+            });
+
+
+        body.innerHTML = `
+
+            <div class="knowvia-feature-result">
+
+                <div class="knowvia-ai-badge">
+                    👨‍🏫 AI Teacher
+                </div>
+
+                <div class="knowvia-result-content">
+
+                    ${formatAIResponse(answer)}
+
+                </div>
+
+            </div>
+
+        `;
+
+
+    } catch (error) {
+
+        body.innerHTML =
+            createFeatureError(
+                error
+            );
+
+    }
+
+}
+
+
+/* ============================================================
+   STUDY SESSION
+   ============================================================ */
+
+async function openStudySession(
+    context
+) {
+
+    const modal =
+        createKnowviaModal(
+            "Study Session",
+            "⏱️"
+        );
+
+
+    const body =
+        modal.querySelector(
+            "#knowviaModalBody"
+        );
+
+
+    body.innerHTML = `
+
+        <div class="knowvia-feature-loading">
+
+            <div class="knowvia-spinner"></div>
+
+            <h3>
+                Building your study session...
+            </h3>
+
+            <p>
+                Knowvia is creating a focused learning plan.
+            </p>
+
+        </div>
+
+    `;
+
+
+    try {
+
+        const answer =
+            await callKnowviaAI({
+
+                task: "study_session",
+
+                topic:
+                    context.topic,
+
+                difficulty:
+                    context.difficulty,
+
+                material:
+                    context.material
+
+            });
+
+
+        studySessionData =
+            answer;
+
+
+        body.innerHTML = `
+
+            <div class="knowvia-session-result">
+
+                <div class="knowvia-ai-badge">
+                    ⏱️ Personalized Study Session
+                </div>
+
+                <div class="knowvia-result-content">
+
+                    ${formatAIResponse(answer)}
+
+                </div>
+
+
+                <div class="knowvia-session-tip">
+
+                    💡 <strong>Tip:</strong>
+                    Focus on one concept at a time.
+                    After each section, try recalling
+                    the idea without looking at your notes.
+
+                </div>
+
+            </div>
+
+        `;
+
+
+    } catch (error) {
+
+        body.innerHTML =
+            createFeatureError(
+                error
+            );
+
+    }
+
+}
+
+
+/* ============================================================
+   EXAM MODE
+   ============================================================ */
+
+async function openExamMode(
+    context
+) {
+
+    const modal =
+        createKnowviaModal(
+            "Exam Mode",
+            "📝"
+        );
+
+
+    const body =
+        modal.querySelector(
+            "#knowviaModalBody"
+        );
+
+
+    body.innerHTML = `
+
+        <div class="knowvia-feature-loading">
+
+            <div class="knowvia-spinner"></div>
+
+            <h3>
+                Creating exam questions...
+            </h3>
+
+            <p>
+                Knowvia is preparing questions
+                based on your study material.
+            </p>
+
+        </div>
+
+    `;
+
+
+    try {
+
+        const answer =
+            await callKnowviaAI({
+
+                task: "exam",
+
+                topic:
+                    context.topic,
+
+                difficulty:
+                    context.difficulty,
+
+                material:
+                    context.material
+
+            });
+
+
+        examData =
+            answer;
+
+
+        body.innerHTML = `
+
+            <div class="knowvia-exam-result">
+
+                <div class="knowvia-ai-badge">
+                    📝 AI Exam Mode
+                </div>
+
+                <div class="knowvia-result-content">
+
+                    ${formatAIResponse(answer)}
+
+                </div>
+
+
+                <div class="knowvia-exam-tip">
+
+                    📌 Try answering the questions
+                    yourself before checking the explanations.
+
+                </div>
+
+            </div>
+
+        `;
+
+
+    } catch (error) {
+
+        body.innerHTML =
+            createFeatureError(
+                error
+            );
+
+    }
+
+}
+
+
+/* ============================================================
+   ASK MY NOTES
+   ============================================================ */
+
+function openAskMyNotes(
+    context
+) {
+
+    const modal =
+        createKnowviaModal(
+            "Ask My Notes",
+            "💬"
+        );
+
+
+    const body =
+        modal.querySelector(
+            "#knowviaModalBody"
+        );
+
+
+    body.innerHTML = `
+
+        <div class="knowvia-ask-notes">
+
+            <div class="knowvia-ask-intro">
+
+                <div class="knowvia-ai-badge">
+                    💬 Ask My Notes
+                </div>
+
+                <p>
+                    Ask a question about the material
+                    you provided. Knowvia will answer
+                    using your study material.
+                </p>
+
+            </div>
+
+
+            <textarea
+                id="knowviaAskInput"
+                class="knowvia-ask-input"
+                rows="4"
+                placeholder="Example: Explain the difference between supervised and unsupervised learning."></textarea>
+
+
+            <button
+                type="button"
+                id="knowviaAskButton"
+                class="knowvia-primary-button">
+
+                Ask Knowvia
+
+            </button>
+
+
+            <div
+                id="knowviaAskAnswer"
+                class="knowvia-ask-answer">
+            </div>
+
+        </div>
+
+    `;
+
+
+    const askButton =
+        document.getElementById(
+            "knowviaAskButton"
+        );
+
+
+    const askInput =
+        document.getElementById(
+            "knowviaAskInput"
+        );
+
+
+    const answerBox =
+        document.getElementById(
+            "knowviaAskAnswer"
+        );
+
+
+    if (askButton) {
+
+        askButton.addEventListener(
+            "click",
+            async function () {
+
+                const question =
+                    askInput.value.trim();
+
+
+                if (!question) {
+
+                    toast(
+                        "Enter a question first.",
+                        "error"
+                    );
+
+                    return;
+
+                }
+
+
+                setBusy(
+                    askButton,
+                    true,
+                    "Thinking..."
+                );
+
+
+                answerBox.innerHTML = `
+
+                    <div class="knowvia-feature-loading">
+
+                        <div class="knowvia-spinner"></div>
+
+                        <p>
+                            Searching your study material...
+                        </p>
+
+                    </div>
+
+                `;
+
+
+                try {
+
+                    const answer =
+                        await callKnowviaAI({
+
+                            task: "ask_notes",
+
+                            topic:
+                                context.topic,
+
+                            difficulty:
+                                context.difficulty,
+
+                            material:
+                                context.material,
+
+                            question:
+                                question
+
+                        });
+
+
+                    askNotesHistory.push({
+
+                        question:
+                            question,
+
+                        answer:
+                            answer
+
+                    });
+
+
+                    answerBox.innerHTML = `
+
+                        <div class="knowvia-answer-card">
+
+                            <div class="knowvia-answer-label">
+                                🤖 Knowvia
+                            </div>
+
+                            ${formatAIResponse(
+                                answer
+                            )}
+
+                        </div>
+
+                    `;
+
+
+                } catch (error) {
+
+                    answerBox.innerHTML =
+                        createFeatureError(
+                            error
+                        );
+
+                } finally {
+
+                    setBusy(
+                        askButton,
+                        false
+                    );
+
+                }
+
+            }
+        );
+
+    }
+
+}
+
+
+/* ============================================================
+   WEAK TOPIC DETECTOR
+   ============================================================ */
+
+async function openWeakTopicDetector(
+    context
+) {
+
+    const modal =
+        createKnowviaModal(
+            "Weak Topic Detector",
+            "🎯"
+        );
+
+
+    const body =
+        modal.querySelector(
+            "#knowviaModalBody"
+        );
+
+
+    body.innerHTML = `
+
+        <div class="knowvia-feature-loading">
+
+            <div class="knowvia-spinner"></div>
+
+            <h3>
+                Analyzing your learning...
+            </h3>
+
+            <p>
+                Knowvia is looking for concepts
+                that may need more practice.
+            </p>
+
+        </div>
+
+    `;
+
+
+    /*
+     * If the user has completed a quiz,
+     * send its result to the AI.
+     */
+
+    let quizResultText = "";
+
+
+    if (
+        studyQuiz &&
+        studyQuiz.length > 0
+    ) {
+
+        const total =
+            studyQuiz.length;
+
+
+        quizResultText =
+            "Quiz score: " +
+            quizScore +
+            " out of " +
+            total +
+            ".\n";
+
+
+        studyQuiz.forEach(
+            function (
+                question,
+                index
+            ) {
+
+                const selected =
+                    currentQuizAnswers[index];
+
+
+                const correct =
+                    question.correctIndex;
+
+
+                quizResultText +=
+                    "\nQuestion " +
+                    (index + 1) +
+                    ": ";
+
+
+                if (
+                    selected === null ||
+                    selected === undefined
+                ) {
+
+                    quizResultText +=
+                        "Not answered.";
+
+                } else if (
+                    selected === correct
+                ) {
+
+                    quizResultText +=
+                        "Correct.";
+
+                } else {
+
+                    quizResultText +=
+                        "Incorrect.";
+
+                }
+
+            }
+        );
+
+    } else {
+
+        quizResultText =
+            "No completed quiz is available yet.";
+
+    }
+
+
+    try {
+
+        const answer =
+            await callKnowviaAI({
+
+                task: "weak_topics",
+
+                topic:
+                    context.topic,
+
+                difficulty:
+                    context.difficulty,
+
+                material:
+                    context.material,
+
+                quizResult:
+                    quizResultText
+
+            });
+
+
+        weakTopics =
+            answer;
+
+
+        body.innerHTML = `
+
+            <div class="knowvia-weak-result">
+
+                <div class="knowvia-ai-badge">
+                    🎯 Learning Analysis
+                </div>
+
+                <div class="knowvia-result-content">
+
+                    ${formatAIResponse(answer)}
+
+                </div>
+
+
+                <div class="knowvia-weak-tip">
+
+                    💡 Review the weakest concepts first,
+                    then retake the quiz to measure improvement.
+
+                </div>
+
+            </div>
+
+        `;
+
+
+    } catch (error) {
+
+        body.innerHTML =
+            createFeatureError(
+                error
+            );
+
+    }
+
+}
+
+
+/* ============================================================
+   EXPLAIN MY MISTAKE
+   ============================================================ */
+
+function openExplainMistake(
+    context
+) {
+
+    const modal =
+        createKnowviaModal(
+            "Explain My Mistake",
+            "❌"
+        );
+
+
+    const body =
+        modal.querySelector(
+            "#knowviaModalBody"
+        );
+
+
+    body.innerHTML = `
+
+        <div class="knowvia-mistake-form">
+
+            <div class="knowvia-ai-badge">
+                ❌ Mistake Analyzer
+            </div>
+
+
+            <p>
+                Paste the question, your answer,
+                or describe what confused you.
+                Knowvia will explain the mistake simply.
+            </p>
+
+
+            <textarea
+                id="knowviaMistakeInput"
+                class="knowvia-ask-input"
+                rows="7"
+                placeholder="Example: I thought classification and regression are the same because both predict values. Why is my answer wrong?"></textarea>
+
+
+            <button
+                type="button"
+                id="knowviaMistakeButton"
+                class="knowvia-primary-button">
+
+                Explain My Mistake
+
+            </button>
+
+
+            <div
+                id="knowviaMistakeAnswer"
+                class="knowvia-ask-answer">
+            </div>
+
+        </div>
+
+    `;
+
+
+    const button =
+        document.getElementById(
+            "knowviaMistakeButton"
+        );
+
+
+    const input =
+        document.getElementById(
+            "knowviaMistakeInput"
+        );
+
+
+    const answerBox =
+        document.getElementById(
+            "knowviaMistakeAnswer"
+        );
+
+
+    if (button) {
+
+        button.addEventListener(
+            "click",
+            async function () {
+
+                const userAnswer =
+                    input.value.trim();
+
+
+                if (!userAnswer) {
+
+                    toast(
+                        "Describe your mistake first.",
+                        "error"
+                    );
+
+                    return;
+
+                }
+
+
+                setBusy(
+                    button,
+                    true,
+                    "Analyzing..."
+                );
+
+
+                answerBox.innerHTML = `
+
+                    <div class="knowvia-feature-loading">
+
+                        <div class="knowvia-spinner"></div>
+
+                        <p>
+                            Understanding your mistake...
+                        </p>
+
+                    </div>
+
+                `;
+
+
+                try {
+
+                    const answer =
+                        await callKnowviaAI({
+
+                            task:
+                                "explain_mistake",
+
+                            topic:
+                                context.topic,
+
+                            difficulty:
+                                context.difficulty,
+
+                            material:
+                                context.material,
+
+                            userAnswer:
+                                userAnswer
+
+                        });
+
+
+                    answerBox.innerHTML = `
+
+                        <div class="knowvia-answer-card">
+
+                            <div class="knowvia-answer-label">
+                                👨‍🏫 Knowvia Explanation
+                            </div>
+
+                            ${formatAIResponse(
+                                answer
+                            )}
+
+                        </div>
+
+                    `;
+
+
+                } catch (error) {
+
+                    answerBox.innerHTML =
+                        createFeatureError(
+                            error
+                        );
+
+                } finally {
+
+                    setBusy(
+                        button,
+                        false
+                    );
+
+                }
+
+            }
+        );
+
+    }
+
+}
+
+
+/* ============================================================
+   FEATURE ERROR
+   ============================================================ */
+
+function createFeatureError(
+    error
+) {
+
+    return `
+
+        <div class="knowvia-error-state">
+
+            <div style="font-size:40px;">
+                ⚠️
+            </div>
+
+            <h3>
+                Something went wrong
+            </h3>
+
+            <p>
+                ${escapeHTML(
+                    error &&
+                    error.message
+                        ? error.message
+                        : "AI request failed."
+                )}
+            </p>
+
+        </div>
+
+    `;
+
+}
+
+
+/* ============================================================
+   FINAL QUIZ RESULT TRACKING
+   ============================================================ */
+
+function saveQuizResult() {
+
+    if (
+        !studyQuiz ||
+        studyQuiz.length === 0
+    ) {
+
+        return;
+
+    }
+
+
+    const total =
+        studyQuiz.length;
+
+
+    const percentage =
+        Math.round(
+            (quizScore / total) * 100
+        );
+
+
+    lastQuizResult = {
+
+        score:
+            quizScore,
+
+        total:
+            total,
+
+        percentage:
+            percentage,
+
+        answers:
+            [...currentQuizAnswers]
+
+    };
+
+}
+
+
+/* ============================================================
+   PATCH QUIZ RESULT FUNCTION
+   ============================================================ */
+
+const originalShowQuizResult =
+    showQuizResult;
+
+
+showQuizResult = function () {
+
+    originalShowQuizResult();
+
+    saveQuizResult();
+
+};
+
+
+/* ============================================================
+   ADVANCED FEATURE STYLES
+   ============================================================ */
+
+function addAdvancedFeatureStyles() {
+
+    if (
+        document.getElementById(
+            "knowviaAdvancedStyles"
+        )
+    ) {
+
+        return;
+
+    }
+
+
+    const style =
+        document.createElement("style");
+
+
+    style.id =
+        "knowviaAdvancedStyles";
+
+
+    style.textContent = `
+
+        /* =========================================
+           AI FEATURE SECTION
+           ========================================= */
+
+        #knowviaAdvancedFeatures {
+
+            margin: 35px 0;
+
+            padding: 25px;
+
+            border-radius: 20px;
+
+            border:
+                1px solid rgba(100,100,100,0.15);
+
+            background:
+                rgba(255,255,255,0.6);
+
+        }
+
+
+        .knowvia-feature-heading {
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 12px;
+
+            margin-bottom: 20px;
+
+        }
+
+
+        .knowvia-feature-heading > span {
+
+            font-size: 30px;
+
+        }
+
+
+        .knowvia-feature-heading h2 {
+
+            margin: 0;
+
+            font-size: 23px;
+
+        }
+
+
+        .knowvia-feature-heading p {
+
+            margin:
+                4px 0 0;
+
+            opacity:
+                0.7;
+
+            font-size:
+                14px;
+
+        }
+
+
+        .knowvia-feature-grid {
+
+            display:
+                grid;
+
+            grid-template-columns:
+                repeat(3, 1fr);
+
+            gap:
+                14px;
+
+        }
+
+
+        .knowvia-feature-card {
+
+            min-height:
+                145px;
+
+            padding:
+                18px;
+
+            border:
+                1px solid rgba(100,100,100,0.15);
+
+            border-radius:
+                16px;
+
+            background:
+                rgba(255,255,255,0.7);
+
+            cursor:
+                pointer;
+
+            text-align:
+                left;
+
+            display:
+                flex;
+
+            flex-direction:
+                column;
+
+            justify-content:
+                center;
+
+            gap:
+                7px;
+
+            transition:
+                transform 0.2s ease,
+                box-shadow 0.2s ease,
+                border-color 0.2s ease;
+
+        }
+
+
+        .knowvia-feature-card:hover {
+
+            transform:
+                translateY(-3px);
+
+            box-shadow:
+                0 10px 25px
+                rgba(0,0,0,0.08);
+
+            border-color:
+                #2563eb;
+
+        }
+
+
+        .knowvia-feature-icon {
+
+            font-size:
+                30px;
+
+            margin-bottom:
+                5px;
+
+        }
+
+
+        .knowvia-feature-card strong {
+
+            font-size:
+                16px;
+
+        }
+
+
+        .knowvia-feature-card small {
+
+            opacity:
+                0.65;
+
+            font-size:
+                12px;
+
+            line-height:
+                1.4;
+
+        }
+
+
+        /* =========================================
+           MODAL
+           ========================================= */
+
+        .knowvia-modal {
+
+            position:
+                fixed;
+
+            inset:
+                0;
+
+            z-index:
+                99998;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            padding:
+                20px;
+
+        }
+
+
+        .knowvia-modal-overlay {
+
+            position:
+                absolute;
+
+            inset:
+                0;
+
+            background:
+                rgba(0,0,0,0.6);
+
+            backdrop-filter:
+                blur(5px);
+
+        }
+
+
+        .knowvia-modal-window {
+
+            position:
+                relative;
+
+            z-index:
+                2;
+
+            width:
+                min(850px, 100%);
+
+            max-height:
+                90vh;
+
+            overflow:
+                hidden;
+
+            border-radius:
+                20px;
+
+            background:
+                white;
+
+            box-shadow:
+                0 25px 70px
+                rgba(0,0,0,0.25);
+
+            display:
+                flex;
+
+            flex-direction:
+                column;
+
+        }
+
+
+        .knowvia-modal-header {
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                space-between;
+
+            padding:
+                18px 22px;
+
+            border-bottom:
+                1px solid
+                rgba(100,100,100,0.15);
+
+        }
+
+
+        .knowvia-modal-title {
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            gap:
+                10px;
+
+        }
+
+
+        .knowvia-modal-title h2 {
+
+            margin:
+                0;
+
+            font-size:
+                20px;
+
+        }
+
+
+        .knowvia-modal-close {
+
+            width:
+                38px;
+
+            height:
+                38px;
+
+            border:
+                none;
+
+            border-radius:
+                50%;
+
+            background:
+                rgba(100,100,100,0.1);
+
+            font-size:
+                25px;
+
+            cursor:
+                pointer;
+
+            line-height:
+                1;
+
+        }
+
+
+        .knowvia-modal-body {
+
+            overflow:
+                auto;
+
+            padding:
+                25px;
+
+            line-height:
+                1.7;
+
+        }
+
+
+        /* =========================================
+           FEATURE LOADING
+           ========================================= */
+
+        .knowvia-feature-loading {
+
+            text-align:
+                center;
+
+            padding:
+                50px 20px;
+
+        }
+
+
+        .knowvia-feature-loading h3 {
+
+            margin:
+                15px 0 8px;
+
+        }
+
+
+        .knowvia-feature-loading p {
+
+            opacity:
+                0.7;
+
+        }
+
+
+        /* =========================================
+           FEATURE RESULTS
+           ========================================= */
+
+        .knowvia-result-content {
+
+            line-height:
+                1.8;
+
+        }
+
+
+        .knowvia-result-content h2,
+        .knowvia-result-content h3,
+        .knowvia-result-content h4 {
+
+            margin-top:
+                22px;
+
+        }
+
+
+        .knowvia-session-tip,
+        .knowvia-exam-tip,
+        .knowvia-weak-tip {
+
+            margin-top:
+                25px;
+
+            padding:
+                15px;
+
+            border-radius:
+                12px;
+
+            background:
+                rgba(37,99,235,0.08);
+
+            line-height:
+                1.6;
+
+        }
+
+
+        /* =========================================
+           ASK MY NOTES
+           ========================================= */
+
+        .knowvia-ask-input {
+
+            width:
+                100%;
+
+            box-sizing:
+                border-box;
+
+            resize:
+                vertical;
+
+            padding:
+                14px;
+
+            margin:
+                10px 0 15px;
+
+            border:
+                1px solid
+                rgba(100,100,100,0.2);
+
+            border-radius:
+                12px;
+
+            font-family:
+                inherit;
+
+            font-size:
+                14px;
+
+        }
+
+
+        .knowvia-primary-button {
+
+            padding:
+                12px 20px;
+
+            border:
+                none;
+
+            border-radius:
+                10px;
+
+            background:
+                #2563eb;
+
+            color:
+                white;
+
+            font-weight:
+                700;
+
+            cursor:
+                pointer;
+
+        }
+
+
+        .knowvia-primary-button:disabled {
+
+            opacity:
+                0.6;
+
+            cursor:
+                not-allowed;
+
+        }
+
+
+        .knowvia-ask-answer {
+
+            margin-top:
+                20px;
+
+        }
+
+
+        .knowvia-answer-card {
+
+            padding:
+                18px;
+
+            border-radius:
+                14px;
+
+            background:
+                rgba(37,99,235,0.06);
+
+            border:
+                1px solid
+                rgba(37,99,235,0.12);
+
+        }
+
+
+        .knowvia-answer-label {
+
+            font-weight:
+                800;
+
+            margin-bottom:
+                10px;
+
+        }
+
+
+        /* =========================================
+           DARK MODE
+           ========================================= */
+
+        body.dark-mode
+        #knowviaAdvancedFeatures,
+
+        body.dark
+        #knowviaAdvancedFeatures {
+
+            background:
+                rgba(25,25,25,0.8);
+
+            border-color:
+                rgba(255,255,255,0.12);
+
+        }
+
+
+        body.dark-mode
+        .knowvia-feature-card,
+
+        body.dark
+        .knowvia-feature-card {
+
+            background:
+                rgba(35,35,35,0.8);
+
+            color:
+                white;
+
+            border-color:
+                rgba(255,255,255,0.12);
+
+        }
+
+
+        body.dark-mode
+        .knowvia-modal-window,
+
+        body.dark
+        .knowvia-modal-window {
+
+            background:
+                #181818;
+
+            color:
+                white;
+
+        }
+
+
+        body.dark-mode
+        .knowvia-modal-header,
+
+        body.dark
+        .knowvia-modal-header {
+
+            border-color:
+                rgba(255,255,255,0.12);
+
+        }
+
+
+        body.dark-mode
+        .knowvia-modal-close,
+
+        body.dark
+        .knowvia-modal-close {
+
+            background:
+                rgba(255,255,255,0.1);
+
+            color:
+                white;
+
+        }
+
+
+        body.dark-mode
+        .knowvia-ask-input,
+
+        body.dark
+        .knowvia-ask-input {
+
+            background:
+                #111;
+
+            color:
+                white;
+
+            border-color:
+                rgba(255,255,255,0.18);
+
+        }
+
+
+        body.dark-mode
+        .knowvia-answer-card,
+
+        body.dark
+        .knowvia-answer-card {
+
+            background:
+                rgba(37,99,235,0.12);
+
+            border-color:
+                rgba(37,99,235,0.2);
+
+        }
+
+
+        /* =========================================
+           MOBILE
+           ========================================= */
+
+        @media (max-width: 800px) {
+
+            .knowvia-feature-grid {
+
+                grid-template-columns:
+                    repeat(2, 1fr);
+
+            }
+
+        }
+
+
+        @media (max-width: 550px) {
+
+            #knowviaAdvancedFeatures {
+
+                padding:
+                    18px;
+
+            }
+
+
+            .knowvia-feature-grid {
+
+                grid-template-columns:
+                    1fr;
+
+            }
+
+
+            .knowvia-feature-card {
+
+                min-height:
+                    110px;
+
+            }
+
+
+            .knowvia-modal {
+
+                padding:
+                    10px;
+
+            }
+
+
+            .knowvia-modal-window {
+
+                max-height:
+                    95vh;
+
+                border-radius:
+                    15px;
+
+            }
+
+
+            .knowvia-modal-body {
+
+                padding:
+                    18px;
+
+            }
+
+        }
+
+    `;
+
+
+    document.head.appendChild(
+        style
+    );
+
+}
+
+
+/* ============================================================
+   CREATE ADVANCED FEATURES
+   ============================================================ */
+
+addAdvancedFeatureStyles();
+
+createAdvancedFeatureButtons();
+
+
+/* ============================================================
+   IMPROVED DARK MODE
+   ============================================================ */
+
+function setupFinalTheme() {
+
+    if (!themeBtn) {
+        return;
+    }
+
+
+    /*
+     * Avoid creating another click handler
+     * if Part 1 already created one.
+     *
+     * The existing handler already toggles
+     * dark-mode and dark.
+     */
+
+    function updateThemeIcon() {
+
+        const isDark =
+            document.body.classList.contains(
+                "dark-mode"
+            ) ||
+            document.body.classList.contains(
+                "dark"
+            );
+
+
+        themeBtn.textContent =
+            isDark
+                ? "☀"
+                : "◐";
+
+    }
+
+
+    updateThemeIcon();
+
+}
+
+
+setupFinalTheme();
+
+
+/* ============================================================
+   KEYBOARD SUPPORT FOR FLASHCARDS
+   ============================================================ */
+
+document.addEventListener(
+    "keydown",
+    function (event) {
+
+        /*
+         * Don't interfere while typing
+         * in an input or textarea.
+         */
+
+        const tag =
+            event.target.tagName;
+
+
+        if (
+            tag === "INPUT" ||
+            tag === "TEXTAREA"
+        ) {
+
+            return;
+
+        }
+
+
+        if (
+            event.key === "ArrowRight"
+        ) {
+
+            nextFlashcard();
+
+        }
+
+
+        if (
+            event.key === "ArrowLeft"
+        ) {
+
+            previousFlashcard();
+
+        }
+
+
+        if (
+            event.key === " " &&
+            flashcard
+        ) {
 
             event.preventDefault();
 
-            $("generateBtn")
-              ?.click();
-
-          }
+            flipCurrentFlashcard();
 
         }
-      );
 
     }
-
-  }
 );
 
 
-/* =========================================================
-   EXPOSE FUNCTIONS
-========================================================= */
+/* ============================================================
+   FINAL KNOWVIA PUBLIC API
+   ============================================================ */
 
-window.resetQuiz =
-  resetQuiz;
+window.Knowvia = {
 
-window.openModal =
-  openModal;
+    callAI:
+        callKnowviaAI,
 
-window.showToast =
-  showToast;
+    formatAIResponse:
+        formatAIResponse,
+
+    parseJSON:
+        parseJSON,
+
+    escapeHTML:
+        escapeHTML,
+
+    toast:
+        toast,
+
+    setBusy:
+        setBusy,
+
+    buildAIContext:
+        buildAIContext,
+
+    getStudyMaterial:
+        getStudyMaterial,
+
+    extractTextFromPDF:
+        extractTextFromPDF,
+
+    extractTextFromImage:
+        extractTextFromImage,
+
+    get currentSource() {
+        return currentSourceType;
+    },
+
+    get currentMaterial() {
+        return currentMaterial;
+    },
+
+    get currentTopic() {
+        return currentTopic;
+    },
+
+    get summary() {
+        return studySummary;
+    },
+
+    get flashcards() {
+        return studyFlashcards;
+    },
+
+    get quiz() {
+        return studyQuiz;
+    },
+
+    get quizScore() {
+        return quizScore;
+    },
+
+    get weakTopics() {
+        return weakTopics;
+    },
+
+    get studySession() {
+        return studySessionData;
+    },
+
+    get exam() {
+        return examData;
+    }
+
+};
+
+
+/* ============================================================
+   END KNOWVIA
+   ============================================================ */
