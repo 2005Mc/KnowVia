@@ -3,165 +3,572 @@ const MODELS = [
   "gemini-3.6-flash"
 ];
 
-const ALLOWED_TASKS = new Set([
-  "study_pack",
-  "summary",
-  "flashcards",
-  "quiz",
-  "teach",
-  "study_session",
-  "exam",
-  "ask_notes",
-  "weak_topics",
-  "explain_mistake",
-  "knowledge_map"
-]);
+const GEMINI_API_URL =
+  "https://generativelanguage.googleapis.com/v1beta/models";
 
-function cleanText(value, fallback = "") {
-  return typeof value === "string"
-    ? value.trim()
-    : fallback;
+function send(res, status, data) {
+  res.status(status).json(data);
 }
 
-function limit(value, max = 30000) {
-  return cleanText(value).slice(0, max);
-}
-
-function cleanJSON(value) {
-  return cleanText(value)
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-}
-
-function parseJSON(value) {
-  const cleaned = cleanJSON(value);
-
+function getText(data) {
   try {
-    return JSON.parse(cleaned);
-  } catch {}
-
-  const firstObject = cleaned.indexOf("{");
-  const lastObject = cleaned.lastIndexOf("}");
-
-  if (firstObject !== -1 && lastObject > firstObject) {
-    try {
-      return JSON.parse(
-        cleaned.slice(firstObject, lastObject + 1)
-      );
-    } catch {}
+    return data.candidates?.[0]?.content?.parts
+      ?.map(p => p.text || "")
+      .join("") || "";
+  } catch {
+    return "";
   }
-
-  const firstArray = cleaned.indexOf("[");
-  const lastArray = cleaned.lastIndexOf("]");
-
-  if (firstArray !== -1 && lastArray > firstArray) {
-    try {
-      return JSON.parse(
-        cleaned.slice(firstArray, lastArray + 1)
-      );
-    } catch {}
-  }
-
-  throw new Error("Gemini returned invalid JSON.");
 }
 
-async function getRequestBody(req) {
-  if (req.body && typeof req.body === "object") {
-    return req.body;
-  }
+function cleanText(value) {
+  if (!value) return "";
+  return String(value).trim();
+}
 
-  if (typeof req.body === "string") {
-    try {
-      return JSON.parse(req.body);
-    } catch {
-      throw new Error("Invalid JSON request body.");
+/* -----------------------------
+   JSON SCHEMAS
+----------------------------- */
+
+const studyPackSchema = {
+  type: "object",
+  properties: {
+    summary: {
+      type: "string"
+    },
+    flashcards: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          question: { type: "string" },
+          answer: { type: "string" }
+        },
+        required: ["question", "answer"]
+      }
+    },
+    quiz: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          question: { type: "string" },
+          options: {
+            type: "array",
+            items: { type: "string" }
+          },
+          correctAnswer: { type: "integer" },
+          explanation: { type: "string" },
+          topic: { type: "string" }
+        },
+        required: [
+          "question",
+          "options",
+          "correctAnswer",
+          "explanation",
+          "topic"
+        ]
+      }
+    },
+    practiceQuestions: {
+      type: "array",
+      items: { type: "string" }
+    },
+    examQuestions: {
+      type: "array",
+      items: { type: "string" }
     }
+  },
+  required: [
+    "summary",
+    "flashcards",
+    "quiz",
+    "practiceQuestions",
+    "examQuestions"
+  ]
+};
+
+const flashcardsSchema = {
+  type: "object",
+  properties: {
+    flashcards: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          question: { type: "string" },
+          answer: { type: "string" }
+        },
+        required: ["question", "answer"]
+      }
+    }
+  },
+  required: ["flashcards"]
+};
+
+const quizSchema = {
+  type: "object",
+  properties: {
+    quiz: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          question: { type: "string" },
+          options: {
+            type: "array",
+            items: { type: "string" }
+          },
+          correctAnswer: { type: "integer" },
+          explanation: { type: "string" },
+          topic: { type: "string" }
+        },
+        required: [
+          "question",
+          "options",
+          "correctAnswer",
+          "explanation",
+          "topic"
+        ]
+      }
+    }
+  },
+  required: ["quiz"]
+};
+
+const weakTopicsSchema = {
+  type: "object",
+  properties: {
+    weakTopics: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          topic: { type: "string" },
+          reason: { type: "string" },
+          recommendation: { type: "string" }
+        },
+        required: ["topic", "reason", "recommendation"]
+      }
+    },
+    overallAdvice: {
+      type: "string"
+    }
+  },
+  required: ["weakTopics", "overallAdvice"]
+};
+
+const knowledgeMapSchema = {
+  type: "object",
+  properties: {
+    title: {
+      type: "string"
+    },
+    coreTopic: {
+      type: "string"
+    },
+    concepts: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          description: { type: "string" },
+          importance: { type: "string" }
+        },
+        required: ["name", "description", "importance"]
+      }
+    },
+    connections: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          from: { type: "string" },
+          to: { type: "string" },
+          relationship: { type: "string" }
+        },
+        required: ["from", "to", "relationship"]
+      }
+    }
+  },
+  required: [
+    "title",
+    "coreTopic",
+    "concepts",
+    "connections"
+  ]
+};
+
+/* -----------------------------
+   PROMPTS
+----------------------------- */
+
+function studyPackPrompt(payload) {
+  const topic = cleanText(payload.topic);
+  const material = cleanText(payload.material);
+  const difficulty = cleanText(payload.difficulty) || "beginner";
+  const quizStyle = cleanText(payload.quizStyle) || "mixed";
+
+  return `
+You are the main AI study engine for an educational application called Knowvia.
+
+Create a COMPLETE study pack for:
+
+TOPIC:
+${topic || "Not specified"}
+
+SOURCE MATERIAL:
+${material || "No additional source material was provided."}
+
+DIFFICULTY:
+${difficulty}
+
+QUESTION STYLE:
+${quizStyle}
+
+IMPORTANT RULE:
+
+Difficulty must NOT decide which syllabus sections are included.
+
+BEGINNER, INTERMEDIATE, and ADVANCED must cover the SAME important aspects of the topic.
+
+The difficulty should change:
+- explanation depth
+- technical detail
+- terminology
+- examples
+- reasoning complexity
+- question difficulty
+
+Do NOT make beginner = only definitions,
+intermediate = only some concepts,
+advanced = completely different topics.
+
+For the topic, cover all relevant areas that actually apply, including:
+
+1. Introduction
+2. Definition
+3. Meaning/basic concept
+4. Background/history where relevant
+5. Characteristics/features
+6. Components/elements
+7. Types
+8. Classification
+9. Working/principle
+10. Architecture/structure where relevant
+11. Important processes/steps
+12. Important terminology
+13. Examples
+14. Applications/real-world uses
+15. Advantages
+16. Limitations/disadvantages
+17. Comparisons
+18. Formulas/rules where relevant
+19. Practical significance
+20. Common mistakes/misconceptions
+21. Exam-important points
+22. Quick revision points
+
+Do not force irrelevant sections onto topics where they do not make sense.
+
+The summary must be comprehensive and organized with clear headings.
+
+For beginner:
+Explain clearly using simple language, basic examples and intuition.
+
+For intermediate:
+Assume basic knowledge and provide more technical detail, relationships and practical examples.
+
+For advanced:
+Assume strong fundamentals and provide deeper reasoning, edge cases, technical details, comparisons and application-level understanding.
+
+FLASHCARDS:
+Create useful question-answer flashcards covering the important concepts.
+
+QUIZ:
+Create 10 multiple-choice questions.
+Each question must have exactly 4 options.
+correctAnswer must be the ZERO-BASED index of the correct option:
+0, 1, 2, or 3.
+
+The requested question style is:
+${quizStyle}
+
+If it is "exam pattern", make questions resemble realistic academic/exam questions.
+
+PRACTICE QUESTIONS:
+Create 5 questions that require the learner to practice understanding or application.
+
+EXAM QUESTIONS:
+Create 5 realistic exam-oriented questions.
+
+Return ONLY the requested JSON structure.
+`;
+}
+
+function flashcardsPrompt(payload) {
+  return `
+Create 10 useful study flashcards about:
+
+TOPIC:
+${cleanText(payload.topic)}
+
+DIFFICULTY:
+${cleanText(payload.difficulty) || "beginner"}
+
+MATERIAL:
+${cleanText(payload.material) || "No additional material."}
+
+Cover different important concepts rather than repeating the same idea.
+
+Return only JSON matching the provided schema.
+`;
+}
+
+function quizPrompt(payload) {
+  return `
+Create 10 multiple-choice questions for:
+
+TOPIC:
+${cleanText(payload.topic)}
+
+DIFFICULTY:
+${cleanText(payload.difficulty) || "beginner"}
+
+QUESTION STYLE:
+${cleanText(payload.quizStyle) || "mixed"}
+
+MATERIAL:
+${cleanText(payload.material) || "No additional material."}
+
+Each question must have exactly 4 options.
+
+correctAnswer must be the ZERO-BASED option index:
+0, 1, 2, or 3.
+
+Make the questions cover different important parts of the topic.
+
+Return only JSON matching the provided schema.
+`;
+}
+
+/* -----------------------------
+   TEXT FEATURE PROMPTS
+----------------------------- */
+
+function textPrompt(task, payload) {
+  const topic = cleanText(payload.topic);
+  const material = cleanText(payload.material);
+  const difficulty = cleanText(payload.difficulty) || "beginner";
+
+  if (task === "teach") {
+    return `
+You are Knowvia's Teach Me tutor.
+
+Teach the following topic:
+
+${topic}
+
+Difficulty:
+${difficulty}
+
+Material:
+${material || "No additional material."}
+
+Teach it like a patient expert.
+
+Structure your response as:
+
+1. What is it?
+2. Why is it important?
+3. Core idea
+4. How it works
+5. Important components/types/features
+6. Simple example
+7. Practical example
+8. Common confusion
+9. Exam tip
+10. Quick recap
+
+Use simple explanations first and gradually increase depth.
+
+Do not skip important concepts just because the learner selected an easier difficulty.
+`;
   }
 
-  return new Promise((resolve, reject) => {
-    let raw = "";
+  if (task === "study_session") {
+    return `
+Create a focused study session for:
 
-    req.on("data", chunk => {
-      raw += chunk;
-    });
+${topic}
 
-    req.on("end", () => {
-      if (!raw) {
-        resolve({});
-        return;
-      }
+Difficulty:
+${difficulty}
 
-      try {
-        resolve(JSON.parse(raw));
-      } catch {
-        reject(new Error("Invalid JSON request body."));
-      }
-    });
+Material:
+${material || "No additional material."}
 
-    req.on("error", reject);
-  });
+Include:
+
+- Learning goal
+- What to learn first
+- Core concepts
+- Active recall questions
+- Practice activity
+- Common mistakes
+- Final self-check
+- Quick revision
+
+Make it practical and suitable for a student.
+`;
+  }
+
+  if (task === "exam") {
+    return `
+Create an Exam Mode preparation session for:
+
+${topic}
+
+Difficulty:
+${difficulty}
+
+Material:
+${material || "No additional material."}
+
+Include:
+
+- Most important exam concepts
+- Definitions to remember
+- Important differences/comparisons
+- Important formulas/rules if applicable
+- Likely short-answer questions
+- Likely long-answer questions
+- Application/problem questions
+- Common mistakes
+- Last-minute revision checklist
+
+Focus on exam usefulness.
+`;
+  }
+
+  if (task === "ask_notes") {
+    return `
+Answer the student's question using the supplied study material as the primary source.
+
+TOPIC:
+${topic}
+
+STUDY MATERIAL:
+${material}
+
+STUDENT QUESTION:
+${cleanText(payload.question)}
+
+Explain clearly.
+
+If the answer is not supported by the supplied material, say that the material does not contain enough information and then provide a clearly labeled general explanation if possible.
+`;
+  }
+
+  if (task === "explain_mistake") {
+    return `
+Explain the student's mistake as a tutor.
+
+TOPIC:
+${topic}
+
+QUESTION:
+${cleanText(payload.question)}
+
+STUDENT ANSWER:
+${cleanText(payload.studentAnswer)}
+
+CORRECT ANSWER:
+${cleanText(payload.correctAnswer)}
+
+Explain:
+
+1. What the question is asking
+2. Why the student's answer is not correct
+3. The correct reasoning
+4. How to avoid the same mistake
+5. One short practice question
+
+Be encouraging and educational.
+`;
+  }
+
+  return `
+Help the student study this topic:
+
+${topic}
+
+Difficulty:
+${difficulty}
+
+Material:
+${material || "No additional material."}
+`;
 }
 
-function extractGeminiText(data) {
-  return (
-    data?.candidates?.[0]?.content?.parts
-      ?.map(part => part?.text || "")
-      .join("")
-      .trim() || ""
-  );
-}
+/* -----------------------------
+   MAIN GEMINI CALL
+----------------------------- */
 
-async function askGemini(prompt, apiKey, jsonMode = false) {
+async function callGemini(prompt, schema) {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error(
+      "GEMINI_API_KEY is missing. Add it in Vercel Environment Variables."
+    );
+  }
+
   let lastError = null;
 
   for (const model of MODELS) {
     try {
-      const requestBody = {
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: prompt
-              }
-            ]
-          }
-        ],
-        generationConfig: {
-          maxOutputTokens: jsonMode ? 12000 : 8000
-        }
-      };
-
-      if (jsonMode) {
-        requestBody.generationConfig.responseMimeType =
-          "application/json";
-      }
-
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        `${GEMINI_API_URL}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": apiKey
+            "Content-Type": "application/json"
           },
-          body: JSON.stringify(requestBody)
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: prompt
+                  }
+                ]
+              }
+            ],
+            generationConfig: schema
+              ? {
+                  responseFormat: {
+                    text: {
+                      mimeType: "application/json",
+                      schema
+                    }
+                  }
+                }
+              : {}
+          })
         }
       );
 
       const raw = await response.text();
 
-      let data = {};
+      let data;
 
       try {
-        data = raw ? JSON.parse(raw) : {};
+        data = JSON.parse(raw);
       } catch {
-        lastError = new Error(
-          `Gemini returned an invalid response from ${model}.`
+        throw new Error(
+          `Gemini returned a non-JSON HTTP response (${response.status}).`
         );
-        continue;
       }
 
       if (!response.ok) {
@@ -171,9 +578,6 @@ async function askGemini(prompt, apiKey, jsonMode = false) {
 
         lastError = new Error(message);
 
-        /*
-          Try the next model for temporary service/rate-limit errors.
-        */
         if (
           response.status === 429 ||
           response.status === 500 ||
@@ -187,775 +591,210 @@ async function askGemini(prompt, apiKey, jsonMode = false) {
         throw lastError;
       }
 
-      const result = extractGeminiText(data);
+      const text = getText(data);
 
-      if (!result) {
-        lastError = new Error(
-          `Gemini returned no text from ${model}.`
-        );
-        continue;
+      if (!text) {
+        throw new Error("Gemini returned an empty response.");
       }
 
-      return result;
+      if (schema) {
+        try {
+          return JSON.parse(text);
+        } catch {
+          throw new Error(
+            "Gemini returned invalid JSON even though structured output was requested."
+          );
+        }
+      }
 
+      return {
+        result: text,
+        answer: text
+      };
     } catch (error) {
       lastError = error;
     }
   }
 
-  throw lastError || new Error(
-    "Gemini is temporarily unavailable. Please try again."
-  );
+  throw lastError || new Error("Gemini request failed.");
 }
 
-
-/* =========================================================
-   COMPLETE STUDY PACK
-   ========================================================= */
-
-function studyPackPrompt(body) {
-  const topic = limit(body.topic, 10000);
-  const material = limit(body.material, 40000);
-  const difficulty = cleanText(
-    body.difficulty,
-    "beginner"
-  );
-
-  const quizStyle = cleanText(
-    body.quizStyle,
-    "mixed"
-  );
-
-  return `
-You are Knowvia, an AI-powered study assistant.
-
-Your job is to create a COMPLETE study pack for the topic below.
-
-TOPIC:
-${topic}
-
-SOURCE MATERIAL:
-${material || "No source material was provided. Use established academic knowledge."}
-
-DIFFICULTY:
-${difficulty}
-
-QUESTION STYLE:
-${quizStyle}
-
-
-==================================================
-IMPORTANT STUDY-PACK RULE
-==================================================
-
-Do NOT create a different syllabus for Beginner,
-Intermediate and Advanced.
-
-ALL difficulty levels must cover the SAME IMPORTANT
-TOPIC AREAS.
-
-The difficulty should change the DEPTH and COMPLEXITY,
-not remove important sections.
-
-For example:
-
-BEGINNER:
-Simple definitions, examples and easy explanations.
-
-INTERMEDIATE:
-More technical terminology, relationships,
-working principles and practical examples.
-
-ADVANCED:
-Deeper mechanisms, architecture, comparisons,
-edge cases, limitations and advanced applications.
-
-
-==================================================
-COMPLETE TOPIC COVERAGE
-==================================================
-
-Whenever applicable, cover these areas:
-
-1. Introduction / definition
-2. Meaning and basic concept
-3. History or background
-4. Characteristics / features
-5. Components / elements
-6. Types
-7. Classification
-8. Working / operating principle
-9. Architecture / structure
-10. Important processes or steps
-11. Important terminology
-12. Examples
-13. Applications / real-world uses
-14. Advantages
-15. Limitations / disadvantages
-16. Comparisons with related concepts
-17. Important formulas or rules, if applicable
-18. Practical significance
-19. Common mistakes / misconceptions
-20. Exam-important points
-21. Quick revision points
-
-
-Do NOT force irrelevant sections.
-
-For example, if a topic has no useful formulas,
-do not invent formulas.
-
-If history is not important for the topic,
-keep it short.
-
-
-==================================================
-SOURCE RULE
-==================================================
-
-If source material is provided:
-
-- Prefer the source material.
-- Do not contradict it unnecessarily.
-- Do not pretend unsupported information came from the source.
-- You may organize the source into a better study structure.
-
-If no source material is provided:
-
-- Use established academic knowledge.
-- Do not invent facts.
-
-
-==================================================
-SUMMARY
-==================================================
-
-Create a comprehensive student-friendly summary.
-
-The summary must contain clearly labelled sections such as:
-
-INTRODUCTION
-DEFINITION
-KEY FEATURES
-COMPONENTS
-TYPES / CLASSIFICATION
-WORKING / PRINCIPLE
-IMPORTANT CONCEPTS
-APPLICATIONS
-ADVANTAGES
-LIMITATIONS
-EXAMPLES
-EXAM POINTS
-QUICK REVISION
-
-Use only sections relevant to the topic.
-
-The difficulty controls how deeply each section is explained.
-
-
-==================================================
-FLASHCARDS
-==================================================
-
-Create 10 flashcards.
-
-Cover DIFFERENT concepts rather than repeating
-the definition.
-
-Include a mixture of:
-- definitions
-- features
-- types
-- components
-- applications
-- comparisons
-- important concepts
-
-
-==================================================
-QUIZ
-==================================================
-
-Create 10 MCQs.
-
-Questions should cover different parts of the topic.
-
-Do NOT make all questions about definitions.
-
-Include:
-- conceptual questions
-- feature/type questions
-- application questions
-- working/principle questions
-- comparison questions
-- exam-style questions
-
-Each question must have exactly four options.
-
-correctAnswer must be:
-0, 1, 2, or 3.
-
-
-==================================================
-PRACTICE QUESTIONS
-==================================================
-
-Create 5 practice questions.
-
-Mix:
-- short answer
-- explanation
-- application
-- comparison
-- reasoning
-
-
-==================================================
-EXAM QUESTIONS
-==================================================
-
-Create 5 exam-oriented questions.
-
-Make them appropriate for the selected difficulty.
-
-==================================================
-RETURN FORMAT
-==================================================
-
-Return ONLY valid JSON.
-
-Do not use Markdown code fences.
-
-Use exactly this structure:
-
-{
-  "summary": "Complete structured study notes...",
-  "flashcards": [
-    {
-      "question": "...",
-      "answer": "..."
-    }
-  ],
-  "quiz": [
-    {
-      "question": "...",
-      "options": [
-        "...",
-        "...",
-        "...",
-        "..."
-      ],
-      "correctAnswer": 0,
-      "explanation": "...",
-      "topic": "..."
-    }
-  ],
-  "practiceQuestions": [
-    "...",
-    "...",
-    "...",
-    "...",
-    "..."
-  ],
-  "examQuestions": [
-    "...",
-    "...",
-    "...",
-    "...",
-    "..."
-  ]
-}
-`;
-}
-
-
-/* =========================================================
-   INDIVIDUAL FEATURES
-   ========================================================= */
-
-function taskPrompt(body) {
-
-  const topic = limit(body.topic, 10000);
-  const material = limit(body.material, 40000);
-  const difficulty = cleanText(
-    body.difficulty,
-    "beginner"
-  );
-
-  switch (body.task) {
-
-    case "summary":
-      return {
-        json: false,
-        prompt: `
-You are Knowvia.
-
-Create COMPLETE study notes for:
-
-TOPIC:
-${topic}
-
-SOURCE MATERIAL:
-${material || "No source material provided."}
-
-DIFFICULTY:
-${difficulty}
-
-Cover all relevant areas:
-
-- Introduction
-- Definition
-- Features / characteristics
-- Components
-- Types
-- Classification
-- Working / principle
-- Important concepts
-- Examples
-- Applications
-- Advantages
-- Limitations
-- Comparisons
-- Common mistakes
-- Exam-important points
-- Quick revision
-
-Do not create separate unrelated summaries.
-
-The same major syllabus coverage must remain present
-at every difficulty level.
-
-Difficulty should change the depth of explanation.
-
-Use clear headings and student-friendly language.
-`
-      };
-
-
-    case "flashcards":
-      return {
-        json: true,
-        prompt: `
-Create 10 comprehensive study flashcards.
-
-Topic:
-${topic}
-
-Material:
-${material}
-
-Difficulty:
-${difficulty}
-
-Cover different areas such as:
-
-definition, features, components, types,
-working, important concepts, applications,
-advantages, limitations and examples.
-
-Return ONLY:
-
-{
-  "flashcards": [
-    {
-      "question": "...",
-      "answer": "..."
-    }
-  ]
-}
-`
-      };
-
-
-    case "quiz":
-      return {
-        json: true,
-        prompt: `
-Create 10 high-quality MCQs for:
-
-Topic:
-${topic}
-
-Material:
-${material}
-
-Difficulty:
-${difficulty}
-
-Cover different concepts.
-
-Include questions about:
-- definitions
-- features
-- types
-- components
-- working
-- applications
-- comparisons
-- reasoning
-
-Each question must have exactly four options.
-
-Return ONLY:
-
-{
-  "quiz": [
-    {
-      "question": "...",
-      "options": [
-        "...",
-        "...",
-        "...",
-        "..."
-      ],
-      "correctAnswer": 0,
-      "explanation": "...",
-      "topic": "..."
-    }
-  ]
-}
-`
-      };
-
-
-    case "teach":
-      return {
-        json: false,
-        prompt: `
-You are Knowvia's Teach Me tutor.
-
-Teach this topic from the beginning:
-
-TOPIC:
-${topic}
-
-MATERIAL:
-${material}
-
-DIFFICULTY:
-${difficulty}
-
-Teach it as a complete lesson.
-
-Cover all relevant:
-
-1. What it is
-2. Why it is important
-3. Features
-4. Components
-5. Types
-6. How it works
-7. Examples
-8. Applications
-9. Advantages
-10. Limitations
-11. Common mistakes
-12. Quick revision
-
-Use simple explanations first and gradually increase
-technical depth according to the selected difficulty.
-
-Use examples and analogies where useful.
-
-End with:
-"Quick Check"
-
-and give 3 questions for the student to answer.
-`
-      };
-
-
-    case "study_session":
-      return {
-        json: false,
-        prompt: `
-Create a complete Knowvia Study Session.
-
-Topic:
-${topic}
-
-Material:
-${material}
-
-Difficulty:
-${difficulty}
-
-Create a practical study session containing:
-
-1. Learning objective
-2. What to understand first
-3. Core concepts
-4. Important definitions
-5. Types/features/components
-6. Working/principle
-7. Applications
-8. What to memorize
-9. What to practice
-10. Self-test
-11. Final revision checklist
-
-Keep it focused and useful for an actual student.
-`
-      };
-
-
-    case "exam":
-      return {
-        json: false,
-        prompt: `
-You are Knowvia Exam Mode.
-
-Prepare a complete exam-oriented revision guide.
-
-Topic:
-${topic}
-
-Material:
-${material}
-
-Difficulty:
-${difficulty}
-
-Include:
-
-IMPORTANT DEFINITIONS
-IMPORTANT FEATURES
-TYPES / CLASSIFICATION
-IMPORTANT COMPONENTS
-WORKING / PRINCIPLE
-APPLICATIONS
-ADVANTAGES
-LIMITATIONS
-COMPARISONS
-COMMON EXAM QUESTIONS
-SHORT-ANSWER QUESTIONS
-LONG-ANSWER QUESTIONS
-LAST-MINUTE REVISION
-
-Focus on points that a student can actually revise
-before an examination.
-`
-      };
-
-
-    case "ask_notes":
-      return {
-        json: false,
-        prompt: `
-You are Knowvia's Ask My Notes assistant.
-
-TOPIC:
-${topic}
-
-STUDY NOTES:
-${material}
-
-STUDENT QUESTION:
-${limit(body.question, 10000)}
-
-Answer using the supplied notes first.
-
-Explain:
-- direct answer
-- relevant concept
-- simple example if useful
-
-If the notes do not contain enough information,
-clearly tell the student that additional knowledge
-is being used.
-
-Never claim something exists in the notes if it does not.
-`
-      };
-
-
-    case "weak_topics":
-      return {
-        json: true,
-        prompt: `
-You are Knowvia's Weak Topic Detector.
-
-Topic:
-${topic}
-
-Quiz Results:
-${JSON.stringify(body.quizResults || [])}
-
-Identify concepts where the student needs improvement.
-
-Return:
-
-{
-  "weakTopics": [
-    {
-      "topic": "...",
-      "reason": "...",
-      "recommendation": "..."
-    }
-  ],
-  "overallAdvice": "..."
-}
-
-Do not invent weaknesses when the results do not
-support them.
-`
-      };
-
-
-    case "explain_mistake":
-      return {
-        json: false,
-        prompt: `
-You are Knowvia's Explain My Mistake tutor.
-
-QUESTION:
-${limit(body.question, 10000)}
-
-STUDENT ANSWER:
-${limit(body.studentAnswer, 5000)}
-
-CORRECT ANSWER:
-${limit(body.correctAnswer, 5000)}
-
-EXISTING EXPLANATION:
-${limit(body.explanation, 10000)}
-
-Explain:
-
-1. What the student misunderstood
-2. Why the student's answer is not correct
-3. Why the correct answer is correct
-4. The concept to remember
-5. A simple memory trick
-6. One similar practice question
-
-Be encouraging.
-`
-      };
-
-
-    case "knowledge_map":
-      return {
-        json: true,
-        prompt: `
-Create a Knowledge Map.
-
-Topic:
-${topic}
-
-Material:
-${material}
-
-Quiz Results:
-${JSON.stringify(body.quizResults || [])}
-
-Return:
-
-{
-  "title": "Knowledge Map",
-  "coreTopic": "...",
-  "concepts": [
-    {
-      "name": "...",
-      "description": "...",
-      "importance": "high"
-    }
-  ],
-  "connections": [
-    {
-      "from": "...",
-      "to": "...",
-      "relationship": "..."
-    }
-  ]
-}
-
-Include the major concepts and their relationships.
-`
-      };
-
-    default:
-      throw new Error("Unsupported task.");
+/* -----------------------------
+   VALIDATION
+----------------------------- */
+
+function validateStudyPack(pack) {
+  if (!pack || typeof pack !== "object") {
+    throw new Error("Study pack is empty.");
   }
+
+  if (typeof pack.summary !== "string") {
+    throw new Error("Study pack summary is missing.");
+  }
+
+  if (!Array.isArray(pack.flashcards)) {
+    throw new Error("Study pack flashcards are missing.");
+  }
+
+  if (!Array.isArray(pack.quiz)) {
+    throw new Error("Study pack quiz is missing.");
+  }
+
+  for (const question of pack.quiz) {
+    if (!Array.isArray(question.options)) {
+      throw new Error("A quiz question has no options.");
+    }
+
+    if (question.options.length !== 4) {
+      throw new Error("Every quiz question must have exactly 4 options.");
+    }
+
+    if (
+      !Number.isInteger(question.correctAnswer) ||
+      question.correctAnswer < 0 ||
+      question.correctAnswer > 3
+    ) {
+      throw new Error("Invalid quiz answer index.");
+    }
+  }
+
+  return pack;
 }
 
-
-/* =========================================================
-   VERCEL FUNCTION
-   ========================================================= */
+/* -----------------------------
+   API HANDLER
+----------------------------- */
 
 export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return send(res, 405, {
+      error: "Method not allowed. Use POST."
+    });
+  }
 
   try {
+    const payload = req.body || {};
+    const task = cleanText(payload.task);
 
-    if (req.method !== "POST") {
-      return res.status(405).json({
-        error: "Method not allowed. Use POST."
+    if (!task) {
+      return send(res, 400, {
+        error: "No task was provided."
       });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (!apiKey) {
-      return res.status(500).json({
-        error:
-          "GEMINI_API_KEY is missing from Vercel Environment Variables."
-      });
-    }
-
-    const body = await getRequestBody(req);
-
-    const task = cleanText(body.task);
-
-    if (!ALLOWED_TASKS.has(task)) {
-      return res.status(400).json({
-        error: "Invalid Knowvia task."
-      });
-    }
-
-    let prompt;
-    let jsonMode = false;
-
+    /* STUDY PACK */
     if (task === "study_pack") {
+      const prompt = studyPackPrompt(payload);
 
-      prompt = studyPackPrompt(body);
-      jsonMode = true;
+      const result = await callGemini(
+        prompt,
+        studyPackSchema
+      );
 
-    } else {
+      validateStudyPack(result);
 
-      const taskData = taskPrompt(body);
-
-      prompt = taskData.prompt;
-      jsonMode = taskData.json;
+      return send(res, 200, result);
     }
 
-    const aiText = await askGemini(
-      prompt,
-      apiKey,
-      jsonMode
-    );
+    /* FLASHCARDS */
+    if (task === "flashcards") {
+      const result = await callGemini(
+        flashcardsPrompt(payload),
+        flashcardsSchema
+      );
 
-    if (jsonMode) {
-
-      const result = parseJSON(aiText);
-
-      return res.status(200).json(result);
-
+      return send(res, 200, result);
     }
 
-    return res.status(200).json({
-      result: aiText,
-      answer: aiText
+    /* QUIZ */
+    if (task === "quiz") {
+      const result = await callGemini(
+        quizPrompt(payload),
+        quizSchema
+      );
+
+      return send(res, 200, result);
+    }
+
+    /* WEAK TOPICS */
+    if (task === "weak_topics") {
+      const result = await callGemini(
+        `
+Analyze these quiz results and identify the student's weak topics.
+
+QUIZ RESULTS:
+${JSON.stringify(payload.quizResults || [], null, 2)}
+
+Identify only genuinely weak areas.
+
+For each weak topic provide:
+- topic
+- reason
+- recommendation
+
+Also provide overall advice.
+
+Return only JSON.
+`,
+        weakTopicsSchema
+      );
+
+      return send(res, 200, result);
+    }
+
+    /* KNOWLEDGE MAP */
+    if (task === "knowledge_map") {
+      const result = await callGemini(
+        `
+Create a knowledge map for:
+
+TOPIC:
+${cleanText(payload.topic)}
+
+QUIZ RESULTS:
+${JSON.stringify(payload.quizResults || [], null, 2)}
+
+Create a useful conceptual map showing:
+- core topic
+- important concepts
+- relationships between concepts
+- importance of concepts
+
+Return only JSON.
+`,
+        knowledgeMapSchema
+      );
+
+      return send(res, 200, result);
+    }
+
+    /* TEXT FEATURES */
+    const supportedTextTasks = [
+      "teach",
+      "study_session",
+      "exam",
+      "ask_notes",
+      "explain_mistake"
+    ];
+
+    if (supportedTextTasks.includes(task)) {
+      const result = await callGemini(
+        textPrompt(task, payload),
+        null
+      );
+
+      return send(res, 200, result);
+    }
+
+    return send(res, 400, {
+      error: `Unknown task: ${task}`
     });
 
   } catch (error) {
+    console.error("Knowvia API error:", error);
 
-    console.error("KNOWVIA API ERROR:", error);
-
-    return res.status(500).json({
-      error:
-        error?.message ||
-        "Knowvia AI could not complete the request."
+    return send(res, 500, {
+      error: error?.message || "Something went wrong with the AI service."
     });
   }
 }
