@@ -23,7 +23,6 @@ const ALLOWED_TASKS = new Set([
 ========================================================= */
 
 function cleanText(value) {
-
   return String(value ?? "")
     .replace(/\u0000/g, "")
     .trim();
@@ -31,14 +30,24 @@ function cleanText(value) {
 
 
 function limit(value, max = 30000) {
-
   const text = cleanText(value);
 
   return text.length > max
     ? text.slice(0, max)
     : text;
 }
+
+
+/*
+   Converts values safely into plain text.
+
+   This prevents:
+   [object Object]
+
+   from appearing when frontend values are objects.
+*/
 function toPlainText(value) {
+
   if (value === null || value === undefined) {
     return "";
   }
@@ -47,12 +56,23 @@ function toPlainText(value) {
     return value.trim();
   }
 
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
     return String(value);
   }
 
+  if (Array.isArray(value)) {
+
+    return value
+      .map(item => toPlainText(item))
+      .filter(Boolean)
+      .join("\n");
+  }
+
   if (typeof value === "object") {
-    // Common possible text/value properties
+
     const possibleValues = [
       value.value,
       value.text,
@@ -63,17 +83,13 @@ function toPlainText(value) {
     ];
 
     for (const item of possibleValues) {
-      if (typeof item === "string" && item.trim()) {
+
+      if (
+        typeof item === "string" &&
+        item.trim()
+      ) {
         return item.trim();
       }
-    }
-
-    // If it is an array, join its useful text
-    if (Array.isArray(value)) {
-      return value
-        .map(item => toPlainText(item))
-        .filter(Boolean)
-        .join("\n");
     }
 
     return "";
@@ -83,16 +99,34 @@ function toPlainText(value) {
 }
 
 
+/*
+   Safely get request body.
+*/
 function getBody(req) {
 
-  if (req.body && typeof req.body === "object") {
+  if (
+    req.body &&
+    typeof req.body === "object"
+  ) {
     return req.body;
+  }
+
+  if (typeof req.body === "string") {
+
+    try {
+      return JSON.parse(req.body);
+    } catch {
+      return {};
+    }
   }
 
   return {};
 }
 
 
+/*
+   Extract text returned by Gemini.
+*/
 function getGeminiText(data) {
 
   try {
@@ -112,6 +146,9 @@ function getGeminiText(data) {
 }
 
 
+/*
+   Remove markdown code fences if Gemini adds them.
+*/
 function cleanJSON(text) {
 
   return String(text || "")
@@ -126,17 +163,22 @@ function cleanJSON(text) {
    GEMINI CALL
 ========================================================= */
 
-async function askGemini(prompt, apiKey, jsonMode = false) {
+async function askGemini(
+  prompt,
+  apiKey,
+  jsonMode = false
+) {
 
   const endpoint =
     `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 
-  const body = {
+  const requestBody = {
 
     contents: [
       {
         role: "user",
+
         parts: [
           {
             text: prompt
@@ -176,7 +218,7 @@ async function askGemini(prompt, apiKey, jsonMode = false) {
       },
 
       body:
-        JSON.stringify(body)
+        JSON.stringify(requestBody)
 
     });
 
@@ -186,6 +228,7 @@ async function askGemini(prompt, apiKey, jsonMode = false) {
 
 
   let data = {};
+
 
   try {
 
@@ -207,7 +250,6 @@ async function askGemini(prompt, apiKey, jsonMode = false) {
     const message =
       data?.error?.message ||
       `Gemini request failed (${response.status}).`;
-
 
     throw new Error(message);
   }
@@ -233,133 +275,238 @@ async function askGemini(prompt, apiKey, jsonMode = false) {
    STUDY PACK PROMPT
 ========================================================= */
 
-function studyPackPrompt(topic, material, difficulty, quizStyle) {
-  const selectedTopic = toPlainText(topic);
-  const sourceMaterial = toPlainText(material);
-  const selectedDifficulty = toPlainText(difficulty) || "beginner";
-  const selectedStyle = toPlainText(quizStyle) || "mixed";
+function studyPackPrompt(
+  topic,
+  material,
+  difficulty,
+  quizStyle
+) {
+
+  /*
+     IMPORTANT:
+     Convert every value to plain text FIRST.
+     This prevents [object Object].
+  */
+
+  const selectedTopic =
+    toPlainText(topic);
+
+  const sourceMaterial =
+    toPlainText(material);
+
+  const selectedDifficulty =
+    toPlainText(difficulty) ||
+    "beginner";
+
+  const selectedStyle =
+    toPlainText(quizStyle) ||
+    "mixed";
+
 
   return `
 You are Knowvia, an AI-powered study assistant.
 
-Create a study pack for the student's EXACT CURRENT TOPIC.
+Your task is to create a complete study pack for the student's EXACT CURRENT TOPIC.
 
-CURRENT TOPIC:
+==================================================
+CURRENT TOPIC
+==================================================
+
 ${selectedTopic || "No topic was provided."}
 
-SOURCE MATERIAL:
+
+==================================================
+SOURCE MATERIAL
+==================================================
+
 ${sourceMaterial || "No additional source material was provided."}
 
-DIFFICULTY:
+
+==================================================
+DIFFICULTY
+==================================================
+
 ${selectedDifficulty}
 
-QUESTION STYLE:
+
+==================================================
+QUESTION STYLE
+==================================================
+
 ${selectedStyle}
 
-IMPORTANT TOPIC RULE:
 
-The CURRENT TOPIC above is the topic you must explain.
+==================================================
+CRITICAL TOPIC RULE
+==================================================
 
-Use ONLY the actual current topic and supplied source material.
+The CURRENT TOPIC above is the ONLY topic you must explain.
 
-Do NOT use Photosynthesis unless the current topic is Photosynthesis.
+Use the exact current topic.
 
-Do NOT use Machine Learning unless the current topic is Machine Learning.
+Do NOT replace the current topic with another topic.
 
-Do NOT use Computer Vision unless the current topic is Computer Vision.
+Do NOT assume the topic is Photosynthesis.
 
-Do NOT use Cloud Computing or any other example topic unless that is actually the student's current topic.
+Do NOT assume the topic is Machine Learning.
 
-Never return a generic explanation.
+Do NOT assume the topic is Computer Vision.
 
-Never use "[object Object]" as the topic.
+Do NOT assume the topic is Cloud Computing.
 
-If the current topic is "Machine Learning", the entire study pack must be about Machine Learning.
+Those are only examples of possible topics.
 
-If the current topic is "Computer Vision", the entire study pack must be about Computer Vision.
+Use them ONLY if they are actually entered as the student's current topic.
 
-If the current topic is "Photosynthesis", the entire study pack must be about Photosynthesis.
+Never use unrelated example topics.
 
-If source material is supplied, use it as the primary basis for the answer.
+Never use old conversation topics.
+
+Never use sample topics.
+
+Never use generic filler.
+
+The summary, flashcards, quiz, practice questions and exam questions MUST all be about the CURRENT TOPIC.
+
+The CURRENT TOPIC is:
+
+"${selectedTopic}"
+
+
+==================================================
+SOURCE MATERIAL RULE
+==================================================
+
+If source material is provided:
+
+- Use it as the primary basis.
+- Stay consistent with the supplied material.
+- Do not replace it with an unrelated explanation.
+- You may organize and explain it more clearly.
+
+If source material is not provided:
+
+- Use your own accurate knowledge of the CURRENT TOPIC.
+
 
 ==================================================
 DIFFICULTY
 ==================================================
 
 BEGINNER:
+
 - Assume the student is new to the topic.
-- Explain the basics clearly.
-- Define important terms.
+- Explain fundamentals clearly.
 - Use simple language.
-- Use simple examples.
+- Define important terminology.
+- Give easy examples.
 - Avoid unnecessary advanced details.
 - Questions should mainly test basic understanding.
 
+
 INTERMEDIATE:
+
 - Assume the student knows the fundamentals.
-- Explain concepts with greater technical depth.
-- Include relationships between concepts.
-- Include comparisons and applications.
+- Explain concepts with more technical depth.
+- Explain relationships between concepts.
+- Include comparisons.
+- Include practical applications.
+- Include moderate reasoning.
 - Questions should test understanding and application.
 
+
 ADVANCED:
+
 - Assume the student already understands the fundamentals.
 - Give deeper technical details.
-- Include advanced concepts and practical considerations.
-- Include reasoning, analysis and application.
-- Questions should be more challenging.
+- Include advanced concepts.
+- Include practical considerations.
+- Include analysis and reasoning.
+- Include challenging applications.
+- Questions should be more difficult.
 
-The selected difficulty MUST genuinely change the depth of the explanation and questions.
+
+The selected difficulty MUST genuinely change:
+
+- Explanation depth
+- Terminology
+- Examples
+- Question difficulty
+- Reasoning level
+
 
 ==================================================
 DETAILED SUMMARY
 ==================================================
 
-Create a detailed study summary about:
+Create a detailed and useful study summary about:
 
-${selectedTopic || "the supplied source material"}
+${selectedTopic}
+
 
 The summary must NOT be a short generic paragraph.
 
-Use these sections whenever they are relevant:
+Use the following sections whenever they genuinely apply:
 
 1. Introduction
+
 2. Definition / Meaning
+
 3. Key Concepts
+
 4. Types / Classification
+
 5. Main Components
+
 6. How It Works / Working
+
 7. Important Characteristics
+
 8. Advantages
+
 9. Limitations / Disadvantages
+
 10. Applications
+
 11. Examples
+
 12. Important Points to Remember
+
 13. Exam-Oriented Points
 
-Only include sections that genuinely apply to the topic.
 
-Do NOT invent types if the topic has no meaningful classification.
+IMPORTANT:
 
-Do NOT invent components if they are not relevant.
+Only include sections that genuinely apply.
 
-Do NOT add generic filler.
+Do NOT invent classifications.
+
+Do NOT invent components.
+
+Do NOT add meaningless filler.
 
 For technical subjects:
-- Explain technical terminology.
+
+- Explain technical terms.
 - Explain processes step by step.
 - Include formulas when relevant.
 - Include comparisons when useful.
 - Include practical examples.
 - Make the explanation useful for a B.Tech student.
 
-The summary must contain actual information about the CURRENT TOPIC.
+
+The summary should be sufficiently detailed for studying and exam preparation.
+
+Do not make the summary unnecessarily short.
+
 
 ==================================================
 FLASHCARDS
 ==================================================
 
-Create exactly 10 flashcards about the CURRENT TOPIC.
+Create EXACTLY 10 flashcards.
+
+Every flashcard MUST be about the CURRENT TOPIC.
 
 Each flashcard must contain:
 
@@ -368,31 +515,41 @@ Each flashcard must contain:
   "answer": "..."
 }
 
+
 ==================================================
 QUIZ
 ==================================================
 
-Create exactly 10 multiple-choice questions about the CURRENT TOPIC.
+Create EXACTLY 10 multiple-choice questions.
+
+Every question MUST be about the CURRENT TOPIC.
 
 Each question must contain:
 
 {
   "question": "...",
-  "options": ["...", "...", "...", "..."],
+  "options": [
+    "...",
+    "...",
+    "...",
+    "..."
+  ],
   "correctAnswer": 0,
   "explanation": "...",
   "topic": "..."
 }
+
 
 Rules:
 
 - Exactly 4 options.
 - Only one option is correct.
 - correctAnswer must be 0, 1, 2 or 3.
-- Questions must be about the CURRENT TOPIC.
+- Questions must match the selected difficulty.
 - Explanations must explain the correct answer.
-- The question topic must identify the actual concept being tested.
-- Quiz difficulty must match the selected difficulty.
+- topic must identify the actual concept being tested.
+- Do not create questions from unrelated topics.
+
 
 ==================================================
 QUESTION STYLE
@@ -402,17 +559,43 @@ Selected style:
 
 ${selectedStyle}
 
-If the style is "mixed":
-Use conceptual, application, reasoning and exam-oriented questions.
 
-If the style is "quiz":
-Focus mainly on MCQ knowledge and understanding.
+If style is:
 
-If the style is "short":
-Create questions suitable for short written answers.
+"mixed"
 
-If the style is "exam":
-Create university/examination-style questions.
+Use a mixture of:
+- Conceptual questions
+- Application questions
+- Reasoning questions
+- Exam-oriented questions
+
+
+"quiz"
+
+Focus mainly on:
+- MCQ knowledge
+- Understanding
+- Concept recognition
+
+
+"short"
+
+Make questions suitable for:
+- Short written answers
+- Definitions
+- Brief explanations
+- Conceptual understanding
+
+
+"exam"
+
+Make questions suitable for:
+- University examinations
+- Long answers
+- Technical explanations
+- Application and analysis
+
 
 ==================================================
 PRACTICE QUESTIONS
@@ -422,6 +605,9 @@ Create useful practice questions about the CURRENT TOPIC.
 
 Match the selected difficulty.
 
+Do not use unrelated topics.
+
+
 ==================================================
 EXAM QUESTIONS
 ==================================================
@@ -430,32 +616,48 @@ Create useful exam-oriented questions about the CURRENT TOPIC.
 
 Match the selected difficulty.
 
+Do not use unrelated topics.
+
+
 ==================================================
 FINAL VALIDATION
 ==================================================
 
-Before returning the answer, check:
+Before returning the answer, internally verify:
 
-- Is the summary about the CURRENT TOPIC?
-- Are the flashcards about the CURRENT TOPIC?
-- Are all quiz questions about the CURRENT TOPIC?
-- Are practice questions about the CURRENT TOPIC?
-- Are exam questions about the CURRENT TOPIC?
-- Did you accidentally use an unrelated example topic?
-- Is the difficulty correct?
-- Did you use the source material when supplied?
-- Is the summary detailed and useful?
+1. Is the summary about the exact CURRENT TOPIC?
 
-If the current topic is "Machine Learning", there must be no unrelated Photosynthesis content.
+2. Are all flashcards about the exact CURRENT TOPIC?
 
-If the current topic is "Computer Vision", there must be no unrelated Photosynthesis content.
+3. Are all quiz questions about the exact CURRENT TOPIC?
+
+4. Are practice questions about the exact CURRENT TOPIC?
+
+5. Are exam questions about the exact CURRENT TOPIC?
+
+6. Did you accidentally use an unrelated example topic?
+
+7. Is the selected difficulty reflected correctly?
+
+8. Did you use the source material when supplied?
+
+9. Is the summary detailed enough?
+
+10. Did you avoid "[object Object]"?
+
+If any answer is NO, correct the response before returning it.
+
+
+==================================================
+OUTPUT
+==================================================
 
 Return ONLY valid JSON.
 
 Use exactly this structure:
 
 {
-  "summary": "Detailed summary about the CURRENT TOPIC.",
+  "summary": "Detailed study summary about the CURRENT TOPIC.",
   "flashcards": [
     {
       "question": "...",
@@ -465,7 +667,12 @@ Use exactly this structure:
   "quiz": [
     {
       "question": "...",
-      "options": ["...", "...", "...", "..."],
+      "options": [
+        "...",
+        "...",
+        "...",
+        "..."
+      ],
       "correctAnswer": 0,
       "explanation": "...",
       "topic": "..."
@@ -480,27 +687,55 @@ Use exactly this structure:
 }
 `;
 }
+
+
 /* =========================================================
    STUDY DNA PROMPT
 ========================================================= */
 
-function studyDNAPrompt(topic, quizResults) {
+function studyDNAPrompt(
+  topic,
+  quizResults
+) {
+
+  const selectedTopic =
+    toPlainText(topic);
+
+  const resultsText =
+    Array.isArray(quizResults)
+      ? JSON.stringify(quizResults)
+      : toPlainText(quizResults);
+
+
   return `
 You are Knowvia's Study DNA Analyzer.
 
-Analyze the student's actual quiz performance and create a meaningful Study DNA report.
+Analyze the student's ACTUAL quiz performance.
 
-TOPIC:
-${topic || "Unknown topic"}
+==================================================
+TOPIC
+==================================================
 
-QUIZ RESULTS:
-${JSON.stringify(quizResults || [])}
+${selectedTopic || "Unknown topic"}
+
+
+==================================================
+QUIZ RESULTS
+==================================================
+
+${resultsText || "No quiz results were provided."}
+
+
+==================================================
+ANALYSIS
+==================================================
 
 Analyze ONLY the information contained in the quiz results.
 
-The analysis should identify:
+Do NOT invent performance data.
 
-1. Overall Performance
+Calculate the actual:
+
 - Total questions
 - Attempted questions
 - Correct answers
@@ -508,35 +743,66 @@ The analysis should identify:
 - Skipped questions
 - Accuracy percentage
 
-2. Learning Level
-Classify the student's current understanding as one of:
+
+==================================================
+LEARNING LEVEL
+==================================================
+
+Classify the student's understanding as one of:
+
 - Needs Improvement
 - Developing
 - Good
 - Strong
 - Excellent
 
-3. Strong Areas
-Identify topics/concepts where the student performed well.
 
-4. Weak Areas
-Identify topics/concepts where the student made mistakes or showed weaker understanding.
+==================================================
+STRONG AREAS
+==================================================
 
-5. Learning Pattern
-Explain what the student's answers suggest about their learning pattern.
+Identify concepts/topics where the student performed well.
 
-For example:
+Use evidence from the quiz results.
+
+
+==================================================
+WEAK AREAS
+==================================================
+
+Identify concepts/topics where the student made mistakes or performed poorly.
+
+Use evidence from the quiz results.
+
+
+==================================================
+LEARNING PATTERN
+==================================================
+
+Explain what the student's performance suggests.
+
+Possible patterns include:
+
 - Strong recall
 - Good conceptual understanding
 - Needs more application practice
 - Confuses similar concepts
 - Needs stronger fundamentals
-- Makes errors despite knowing the concept
+- Makes errors despite understanding
+- Difficulty applying concepts
 
-6. Mistake Pattern
-Look for patterns in the incorrect answers.
 
-Examples:
+Only identify a pattern when supported by the results.
+
+
+==================================================
+MISTAKE PATTERN
+==================================================
+
+Identify patterns in incorrect answers.
+
+Possible examples:
+
 - Conceptual mistakes
 - Confusion between terms
 - Application mistakes
@@ -544,27 +810,55 @@ Examples:
 - Careless mistakes
 - Partial understanding
 
-7. Recommended Study Strategy
-Give specific recommendations based on the student's actual performance.
 
-8. Next Step
-Suggest what the student should do next:
+Do not invent a mistake pattern when there is insufficient evidence.
+
+
+==================================================
+STUDY STRATEGY
+==================================================
+
+Give practical study recommendations based on the student's actual performance.
+
+Recommendations should focus on the student's weak areas.
+
+
+==================================================
+NEXT STEP
+==================================================
+
+Suggest the most useful next action.
+
+Examples:
+
 - Revise fundamentals
 - Review weak topics
 - Practice application questions
 - Attempt another quiz
+- Practice difficult questions
 - Move to a higher difficulty level
-etc.
 
-IMPORTANT:
-- Do NOT give a generic study report.
-- Base the analysis on the student's actual quiz answers.
-- Do NOT invent performance data.
-- If there is not enough information to identify a pattern, clearly say so.
-- Keep the report useful for a B.Tech student.
-- Make the recommendations practical.
 
-Return ONLY valid JSON in exactly this format:
+==================================================
+IMPORTANT
+==================================================
+
+Do NOT give a generic report.
+
+Base everything on the actual quiz results.
+
+If there is not enough information to identify a pattern, clearly say so.
+
+Keep the recommendations useful for a B.Tech student.
+
+
+==================================================
+OUTPUT
+==================================================
+
+Return ONLY valid JSON.
+
+Use exactly this format:
 
 {
   "overallPerformance": {
@@ -594,6 +888,7 @@ Return ONLY valid JSON in exactly this format:
 `;
 }
 
+
 /* =========================================================
    WEAK TOPICS PROMPT
 ========================================================= */
@@ -603,21 +898,30 @@ function weakTopicsPrompt({
   quizResults
 }) {
 
-  return `
+  const selectedTopic =
+    toPlainText(topic);
 
+  const resultsText =
+    Array.isArray(quizResults)
+      ? JSON.stringify(quizResults)
+      : toPlainText(quizResults);
+
+
+  return `
 You are Knowvia's Weak Topic Detector.
 
 MAIN TOPIC:
-${limit(topic, 500)}
+${limit(selectedTopic, 500)}
 
 QUIZ RESULTS:
-${limit(
-  JSON.stringify(quizResults),
-  18000
-)}
+${limit(resultsText, 18000)}
 
 
 Identify concepts where the student performed poorly.
+
+Use ONLY evidence from the quiz results.
+
+Do not invent weak areas.
 
 Return ONLY valid JSON:
 
@@ -637,10 +941,6 @@ If there are no meaningful weak areas:
 {
   "weakTopics": []
 }
-
-
-Use only evidence from the quiz results.
-
 `;
 }
 
@@ -658,23 +958,22 @@ function explainMistakePrompt({
 }) {
 
   return `
-
 You are Knowvia's mistake-explanation tutor.
 
 TOPIC:
-${limit(topic, 500)}
+${limit(toPlainText(topic), 500)}
 
 QUESTION:
-${limit(question, 4000)}
+${limit(toPlainText(question), 4000)}
 
 STUDENT ANSWER:
-${limit(studentAnswer, 2000)}
+${limit(toPlainText(studentAnswer), 2000)}
 
 CORRECT ANSWER:
-${limit(correctAnswer, 2000)}
+${limit(toPlainText(correctAnswer), 2000)}
 
 EXISTING EXPLANATION:
-${limit(explanation, 4000)}
+${limit(toPlainText(explanation), 4000)}
 
 
 Explain the mistake in a simple student-friendly way.
@@ -682,16 +981,20 @@ Explain the mistake in a simple student-friendly way.
 Use this structure:
 
 1. What you answered
+
 2. Why it is incorrect
+
 3. Correct concept
+
 4. Correct answer
+
 5. Easy way to remember
+
 6. One similar practice question
 
 Do not be harsh or judgmental.
 
 Return normal text.
-
 `;
 }
 
@@ -705,21 +1008,32 @@ function knowledgeMapPrompt({
   quizResults
 }) {
 
-  return `
+  const selectedTopic =
+    toPlainText(topic);
 
+  const resultsText =
+    Array.isArray(quizResults)
+      ? JSON.stringify(quizResults)
+      : toPlainText(quizResults);
+
+
+  return `
 You are Knowvia's Knowledge Map generator.
 
 MAIN TOPIC:
-${limit(topic, 500)}
+${limit(selectedTopic, 500)}
 
 QUIZ RESULTS:
-${limit(
-  JSON.stringify(quizResults),
-  18000
-)}
+${limit(resultsText, 18000)}
 
 
 Create a conceptual map of the important ideas.
+
+Use the supplied topic and quiz information.
+
+Create 6 to 10 useful concepts.
+
+Connections should explain which concepts are related.
 
 Return ONLY valid JSON:
 
@@ -736,14 +1050,6 @@ Return ONLY valid JSON:
     }
   ]
 }
-
-
-Create 6 to 10 useful concepts.
-
-Connections should explain which concepts are related.
-
-Use the supplied topic and quiz information.
-
 `;
 }
 
@@ -756,8 +1062,6 @@ export default async function handler(req, res) {
 
   /*
      Always return JSON.
-     This prevents HTML-like responses from confusing
-     the frontend.
   */
 
   res.setHeader(
@@ -765,6 +1069,10 @@ export default async function handler(req, res) {
     "application/json; charset=utf-8"
   );
 
+
+  /* =======================================================
+     METHOD CHECK
+  ======================================================= */
 
   if (req.method !== "POST") {
 
@@ -777,6 +1085,10 @@ export default async function handler(req, res) {
 
 
   try {
+
+    /* =====================================================
+       GEMINI API KEY
+    ===================================================== */
 
     const apiKey =
       process.env.GEMINI_API_KEY;
@@ -793,6 +1105,10 @@ export default async function handler(req, res) {
     }
 
 
+    /* =====================================================
+       REQUEST BODY
+    ===================================================== */
+
     const body =
       getBody(req);
 
@@ -800,6 +1116,10 @@ export default async function handler(req, res) {
     const task =
       cleanText(body.task);
 
+
+    /* =====================================================
+       TASK VALIDATION
+    ===================================================== */
 
     if (!ALLOWED_TASKS.has(task)) {
 
@@ -817,57 +1137,68 @@ export default async function handler(req, res) {
     let jsonMode = false;
 
 
-    /* =========================
+    /* =====================================================
        STUDY PACK
-    ========================= */
+    ===================================================== */
 
     if (task === "study_pack") {
 
+      /*
+         IMPORTANT FIX:
+
+         studyPackPrompt() expects:
+
+         topic,
+         material,
+         difficulty,
+         quizStyle
+
+         NOT one object.
+
+         This was the cause of [object Object].
+      */
+
       prompt =
-        studyPackPrompt({
-
-          topic:
-            body.topic,
-
-          material:
-            body.material,
-
-          difficulty:
-            body.difficulty,
-
-          quizStyle:
-            body.quizStyle
-
-        });
+        studyPackPrompt(
+          body.topic,
+          body.material,
+          body.difficulty,
+          body.quizStyle
+        );
 
       jsonMode = true;
     }
 
 
-    /* =========================
+    /* =====================================================
        STUDY DNA
-    ========================= */
+    ===================================================== */
 
     else if (task === "study_dna") {
 
+      /*
+         IMPORTANT FIX:
+
+         Correct function name is:
+
+         studyDNAPrompt
+
+         not studyDnaPrompt
+      */
+
       prompt =
-        studyDnaPrompt({
-
-          topic:
-            body.topic,
-
-          quizResults:
-            body.quizResults
-
-        });
+        studyDNAPrompt(
+          body.topic,
+          body.quizResults
+        );
 
       jsonMode = true;
     }
 
 
-    /* =========================
+    /* =====================================================
        WEAK TOPICS
-    ========================= */
+    ===================================================== */
 
     else if (task === "weak_topics") {
 
@@ -886,9 +1217,9 @@ export default async function handler(req, res) {
     }
 
 
-    /* =========================
+    /* =====================================================
        EXPLAIN MISTAKE
-    ========================= */
+    ===================================================== */
 
     else if (task === "explain_mistake") {
 
@@ -916,9 +1247,9 @@ export default async function handler(req, res) {
     }
 
 
-    /* =========================
+    /* =====================================================
        KNOWLEDGE MAP
-    ========================= */
+    ===================================================== */
 
     else if (task === "knowledge_map") {
 
@@ -937,9 +1268,9 @@ export default async function handler(req, res) {
     }
 
 
-    /* =========================
+    /* =====================================================
        CALL GEMINI
-    ========================= */
+    ===================================================== */
 
     const result =
       await askGemini(
@@ -949,13 +1280,14 @@ export default async function handler(req, res) {
       );
 
 
-    /* =========================
+    /* =====================================================
        JSON TASKS
-    ========================= */
+    ===================================================== */
 
     if (jsonMode) {
 
       let parsed;
+
 
       try {
 
@@ -964,7 +1296,12 @@ export default async function handler(req, res) {
             cleanJSON(result)
           );
 
-      } catch {
+      } catch (error) {
+
+        console.error(
+          "Gemini JSON parsing error:",
+          error
+        );
 
         return res
           .status(502)
@@ -981,9 +1318,9 @@ export default async function handler(req, res) {
     }
 
 
-    /* =========================
+    /* =====================================================
        TEXT TASK
-    ========================= */
+    ===================================================== */
 
     return res
       .status(200)
@@ -991,7 +1328,8 @@ export default async function handler(req, res) {
 
         result,
 
-        answer: result
+        answer:
+          result
 
       });
 
