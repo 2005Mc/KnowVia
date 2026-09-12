@@ -190,179 +190,421 @@ async function askGemini(prompt, apiKey, jsonMode = false) {
    STUDY PACK PROMPT
 ========================================================= */
 
-function studyPackPrompt({
-  topic,
-  material,
-  difficulty,
-  quizStyle
-}) {
-
+function studyPackPrompt(topic, material, difficulty, quizStyle) {
   return `
-
 You are Knowvia, an AI study assistant.
 
-Create a complete study pack for the learner.
+Create a high-quality study pack for the student.
 
 TOPIC:
-${limit(topic, 500)}
+${topic || "Not specified"}
 
 SOURCE MATERIAL:
-${limit(material, 28000)}
+${material || "No source material was provided. Use accurate general knowledge about the topic."}
 
 DIFFICULTY:
-${limit(difficulty, 50)}
+${difficulty}
 
 QUESTION STYLE:
-${limit(quizStyle, 50)}
+${quizStyle}
 
+IMPORTANT DIFFICULTY RULE:
+The difficulty level MUST genuinely affect the content.
 
-IMPORTANT:
+BEGINNER:
+- Use simple language.
+- Explain concepts from the basics.
+- Assume the student has little or no prior knowledge.
+- Use simple examples.
+- Avoid unnecessary technical complexity.
+- Questions should test basic understanding and recognition.
 
-Use the supplied source material when it exists.
+INTERMEDIATE:
+- Assume the student already understands the basic definitions.
+- Explain relationships between concepts.
+- Include moderate technical terminology.
+- Include examples and small applications.
+- Questions should test understanding, comparison, reasoning and application.
 
-Do not invent facts that contradict the source.
+ADVANCED:
+- Assume strong knowledge of the fundamentals.
+- Include deeper technical details.
+- Explain important relationships, edge cases and practical considerations.
+- Include more complex examples and applications.
+- Questions should require reasoning, analysis and problem solving.
 
-Keep explanations appropriate for the selected difficulty.
+SUMMARY REQUIREMENT:
+The summary MUST NOT be a short paragraph.
 
-Return ONLY valid JSON.
+Create a detailed, well-organized study summary.
 
-The JSON MUST have exactly these main fields:
+The summary should contain the following sections whenever they are relevant to the topic:
 
-{
-  "summary": "...",
-  "flashcards": [],
-  "quiz": []
-}
+1. Introduction
+2. Definition / Meaning
+3. Key Concepts
+4. Types / Classification
+5. Main Components
+6. How It Works / Working / Steps
+7. Important Characteristics
+8. Advantages
+9. Limitations / Disadvantages
+10. Applications
+11. Examples
+12. Important Points to Remember
+13. Exam-Oriented Points
 
+Do NOT force a section if it genuinely does not apply to the topic.
 
-SUMMARY:
+For technical subjects:
+- Include important terminology.
+- Explain processes step by step.
+- Include formulas only when relevant.
+- Include comparisons when useful.
+- Include practical examples.
+- Make the explanation suitable for a B.Tech student.
 
-Create a clear, student-friendly explanation.
+For topics that have types, classifications or categories,
+explain each important type clearly.
 
-Use headings and concise explanations.
+For topics involving a process or algorithm,
+explain the working step by step.
 
+For topics involving comparisons,
+clearly explain the differences.
+
+For BEGINNER level:
+Keep explanations simple but complete.
+
+For INTERMEDIATE level:
+Give more depth, relationships and applications.
+
+For ADVANCED level:
+Give deeper technical explanation, reasoning, edge cases and practical relevance.
+
+Do not write meaningless filler.
+Do not repeat the same information in different sections.
+Use clear headings and bullet points where appropriate.
 
 FLASHCARDS:
-
-Create exactly 10 flashcards.
-
-Each flashcard:
-
-{
-  "question": "...",
-  "answer": "..."
-}
-
+Create exactly 10 useful flashcards.
+Each flashcard must have:
+- question
+- answer
 
 QUIZ:
-
 Create exactly 10 multiple-choice questions.
 
-Each question MUST have:
+Each question must contain:
+- question
+- exactly 4 options
+- correctAnswer (0, 1, 2, or 3)
+- explanation
+- topic
+
+The quiz difficulty must match the selected difficulty.
+
+QUESTION STYLE RULE:
+If the selected style is "mixed", create a mixture of conceptual, application, reasoning and exam-style questions appropriate to the difficulty.
+
+If the selected style is "quiz", focus mainly on MCQ-style testing.
+
+If the selected style is "short", create questions that require short written answers.
+
+If the selected style is "exam", make questions resemble university/examination questions.
+
+PRACTICE QUESTIONS:
+Create useful practice questions appropriate to the selected difficulty.
+
+EXAM QUESTIONS:
+Create useful exam-oriented questions appropriate to the selected difficulty.
+
+Return ONLY valid JSON in exactly this structure:
 
 {
-  "question": "...",
-  "options": [
-    "...",
-    "...",
-    "...",
+  "summary": "detailed study summary with headings and sections",
+  "flashcards": [
+    {
+      "question": "...",
+      "answer": "..."
+    }
+  ],
+  "quiz": [
+    {
+      "question": "...",
+      "options": ["...", "...", "...", "..."],
+      "correctAnswer": 0,
+      "explanation": "...",
+      "topic": "..."
+    }
+  ],
+  "practiceQuestions": [
     "..."
   ],
-  "correctAnswer": 0,
-  "explanation": "...",
-  "topic": "..."
+  "examQuestions": [
+    "..."
+  ]
 }
-
-
-RULES FOR correctAnswer:
-
-It MUST be a number:
-
-0, 1, 2, or 3.
-
-Do not use letters.
-
-Do not write the answer text there.
-
-
-QUESTION STYLE:
-
-If the style is "mcq", focus on standard MCQs.
-
-If the style is "short", make the questions conceptually suitable for short-answer practice while still returning four options.
-
-If the style is "exam", make the questions resemble examination concepts.
-
-If the style is "mixed", mix recall, understanding and application questions.
-
-
-QUALITY:
-
-Every question must have exactly 4 options.
-
-There must be exactly one correct option.
-
-Avoid duplicate options.
-
-Keep the questions directly related to the topic.
-
-Return ONLY JSON.
-
 `;
 }
-
-
 /* =========================================================
    STUDY DNA PROMPT
 ========================================================= */
 
-function studyDnaPrompt({
-  topic,
-  quizResults
-}) {
+function analyzeStudyDNA() {
+  if (!state.quiz || state.quiz.length === 0) {
+    showFeatureOutput(
+      "Study DNA",
+      "Generate and complete a quiz first. Your Study DNA is created from your quiz performance."
+    );
+    return;
+  }
 
-  return `
+  const total = state.quiz.length;
 
-You are Knowvia's Study DNA analyzer.
+  let correct = 0;
+  let attempted = 0;
+  let skipped = 0;
 
-TOPIC:
-${limit(topic, 500)}
+  const topicStats = {};
 
-QUIZ RESULTS:
-${limit(
-  JSON.stringify(quizResults),
-  18000
-)}
+  state.quiz.forEach((question, index) => {
+    const answer = state.quizAnswers[index];
 
+    const topic =
+      question.topic ||
+      "General";
 
-Analyze the student's performance.
+    if (!topicStats[topic]) {
+      topicStats[topic] = {
+        total: 0,
+        correct: 0,
+        attempted: 0
+      };
+    }
 
-Return ONLY valid JSON in this format:
+    topicStats[topic].total++;
 
-{
-  "profile": "...",
-  "recallPattern": "...",
-  "strengths": [
-    "...",
-    "..."
-  ],
-  "improvements": [
-    "...",
-    "..."
-  ],
-  "recommendation": "..."
+    if (
+      answer === null ||
+      answer === undefined ||
+      answer === ""
+    ) {
+      skipped++;
+      return;
+    }
+
+    attempted++;
+
+    topicStats[topic].attempted++;
+
+    if (Number(answer) === Number(question.correctAnswer)) {
+      correct++;
+      topicStats[topic].correct++;
+    }
+  });
+
+  const accuracy =
+    attempted > 0
+      ? Math.round((correct / attempted) * 100)
+      : 0;
+
+  const completion =
+    total > 0
+      ? Math.round((attempted / total) * 100)
+      : 0;
+
+  let learningLevel = "";
+  let learningStyle = "";
+  let recommendation = "";
+
+  if (accuracy >= 85) {
+    learningLevel = "Strong understanding";
+    recommendation =
+      "You have a strong grasp of the topic. Focus next on advanced applications, difficult questions and exam-style problems.";
+  } else if (accuracy >= 70) {
+    learningLevel = "Good understanding";
+    recommendation =
+      "Your fundamentals are good. Revise the concepts you missed and practice application-based questions.";
+  } else if (accuracy >= 50) {
+    learningLevel = "Developing understanding";
+    recommendation =
+      "You understand some important concepts, but your knowledge needs reinforcement. Review the summary and retry the weak areas.";
+  } else {
+    learningLevel = "Needs reinforcement";
+    recommendation =
+      "Start by revising the fundamentals and key concepts. Then attempt another quiz before moving to advanced questions.";
+  }
+
+  if (completion < 60) {
+    learningStyle =
+      "You tend to leave questions unanswered. Try attempting more questions so Knowvia can understand your learning pattern better.";
+  } else if (accuracy >= 80) {
+    learningStyle =
+      "You learn effectively through active recall and question-based practice.";
+  } else if (accuracy >= 60) {
+    learningStyle =
+      "You benefit from a combination of concept revision and active practice.";
+  } else {
+    learningStyle =
+      "You would benefit most from concept-first learning followed by repeated practice.";
+  }
+
+  const topicEntries = Object.entries(topicStats);
+
+  topicEntries.sort((a, b) => {
+    const accuracyA =
+      a[1].attempted > 0
+        ? a[1].correct / a[1].attempted
+        : 0;
+
+    const accuracyB =
+      b[1].attempted > 0
+        ? b[1].correct / b[1].attempted
+        : 0;
+
+    return accuracyA - accuracyB;
+  });
+
+  const weakTopics = topicEntries
+    .filter(([_, data]) => {
+      if (data.attempted === 0) return true;
+
+      return (
+        data.correct / data.attempted < 0.7
+      );
+    })
+    .slice(0, 3);
+
+  const strongTopics = [...topicEntries]
+    .sort((a, b) => {
+      const accuracyA =
+        a[1].attempted > 0
+          ? a[1].correct / a[1].attempted
+          : 0;
+
+      const accuracyB =
+        b[1].attempted > 0
+          ? b[1].correct / b[1].attempted
+          : 0;
+
+      return accuracyB - accuracyA;
+    })
+    .filter(([_, data]) => data.attempted > 0)
+    .slice(0, 3);
+
+  let weakHTML = "";
+
+  if (weakTopics.length > 0) {
+    weakHTML = weakTopics
+      .map(([topic, data]) => {
+        const topicAccuracy =
+          data.attempted > 0
+            ? Math.round(
+                (data.correct / data.attempted) * 100
+              )
+            : 0;
+
+        return `
+          <div class="dna-topic">
+            <strong>${escapeHTML(topic)}</strong>
+            <span>${topicAccuracy}% accuracy</span>
+          </div>
+        `;
+      })
+      .join("");
+  } else {
+    weakHTML = `
+      <div class="dna-empty">
+        No major weak topic was detected from this quiz.
+      </div>
+    `;
+  }
+
+  let strongHTML = "";
+
+  if (strongTopics.length > 0) {
+    strongHTML = strongTopics
+      .map(([topic, data]) => {
+        const topicAccuracy =
+          data.attempted > 0
+            ? Math.round(
+                (data.correct / data.attempted) * 100
+              )
+            : 0;
+
+        return `
+          <div class="dna-topic">
+            <strong>${escapeHTML(topic)}</strong>
+            <span>${topicAccuracy}% accuracy</span>
+          </div>
+        `;
+      })
+      .join("");
+  } else {
+    strongHTML = `
+      <div class="dna-empty">
+        Complete more questions to identify your strongest areas.
+      </div>
+    `;
+  }
+
+  const html = `
+    <div class="dna-header">
+      <h3>Your Study DNA</h3>
+      <p>Based on your actual performance in the current quiz.</p>
+    </div>
+
+    <div class="dna-stats">
+      <div class="dna-stat">
+        <strong>${accuracy}%</strong>
+        <span>Accuracy</span>
+      </div>
+
+      <div class="dna-stat">
+        <strong>${correct}/${attempted}</strong>
+        <span>Correct</span>
+      </div>
+
+      <div class="dna-stat">
+        <strong>${completion}%</strong>
+        <span>Completed</span>
+      </div>
+
+      <div class="dna-stat">
+        <strong>${skipped}</strong>
+        <span>Skipped</span>
+      </div>
+    </div>
+
+    <div class="dna-section">
+      <h4>Learning Level</h4>
+      <p>${learningLevel}</p>
+    </div>
+
+    <div class="dna-section">
+      <h4>Your Learning Pattern</h4>
+      <p>${learningStyle}</p>
+    </div>
+
+    <div class="dna-section">
+      <h4>Strong Areas</h4>
+      ${strongHTML}
+    </div>
+
+    <div class="dna-section">
+      <h4>Areas That Need More Practice</h4>
+      ${weakHTML}
+    </div>
+
+    <div class="dna-section">
+      <h4>Recommended Next Step</h4>
+      <p>${recommendation}</p>
+    </div>
+  `;
+
+  showFeatureOutput("Study DNA", html);
 }
-
-
-The analysis must be based on the supplied quiz results.
-
-Do not claim personal information that cannot be inferred.
-
-Keep the recommendation practical for a student.
-
-`;
-}
-
 
 /* =========================================================
    WEAK TOPICS PROMPT
