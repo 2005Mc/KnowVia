@@ -1,6 +1,6 @@
 // ============================================================
 // KNOWVIA - GEMINI AI BACKEND
-// Simple Interactions API version
+// Gemini Interactions API
 // ============================================================
 
 const MODELS = [
@@ -12,47 +12,50 @@ const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/interactions";
 
 // ============================================================
-// HELPER
+// RESPONSE HELPER
 // ============================================================
 
 function send(res, status, data) {
   return res.status(status).json(data);
 }
 
+// ============================================================
+// CLEAN JSON
+// ============================================================
+
 function cleanJSON(text) {
   if (!text) return "";
 
   let value = String(text).trim();
 
-  // Remove markdown fences if Gemini adds them
   value = value.replace(/^```json\s*/i, "");
   value = value.replace(/^```\s*/i, "");
   value = value.replace(/\s*```$/i, "");
 
-  // Sometimes the model adds text before/after JSON.
-  // Try to isolate the main JSON object.
-  const firstBrace = value.indexOf("{");
-  const lastBrace = value.lastIndexOf("}");
+  const firstObject = value.indexOf("{");
+  const lastObject = value.lastIndexOf("}");
 
   if (
-    firstBrace !== -1 &&
-    lastBrace !== -1 &&
-    lastBrace > firstBrace
+    firstObject !== -1 &&
+    lastObject !== -1 &&
+    lastObject > firstObject
   ) {
-    value = value.slice(firstBrace, lastBrace + 1);
+    value = value.slice(
+      firstObject,
+      lastObject + 1
+    );
   }
 
   return value.trim();
 }
 
 // ============================================================
-// GET TEXT FROM INTERACTIONS RESPONSE
+// EXTRACT GEMINI TEXT
 // ============================================================
 
 function getModelText(data) {
   if (!data) return "";
 
-  // Current Interactions API response
   if (Array.isArray(data.steps)) {
     for (const step of data.steps) {
       if (step.type !== "model_output") continue;
@@ -61,6 +64,7 @@ function getModelText(data) {
 
       for (const item of step.content) {
         if (
+          item &&
           item.type === "text" &&
           typeof item.text === "string"
         ) {
@@ -70,7 +74,6 @@ function getModelText(data) {
     }
   }
 
-  // Extra fallback in case Google changes the response shape
   if (
     typeof data.output_text === "string" &&
     data.output_text.trim()
@@ -90,7 +93,7 @@ async function callGemini(prompt) {
 
   if (!apiKey) {
     throw new Error(
-      "GEMINI_API_KEY is missing in Vercel."
+      "GEMINI_API_KEY is missing in Vercel Environment Variables."
     );
   }
 
@@ -101,12 +104,12 @@ async function callGemini(prompt) {
       console.log("Trying Gemini model:", model);
 
       // IMPORTANT:
-      // There is intentionally NO response_format here.
-      // There is NO generation_config here.
-      // There is NO mime_type here.
+      // No response_format
+      // No generation_config
+      // No mime_type
 
       const body = {
-        model: model,
+        model,
         input: prompt,
         store: false
       };
@@ -131,7 +134,10 @@ async function callGemini(prompt) {
         data = JSON.parse(rawText);
       } catch {
         throw new Error(
-          `Gemini returned a non-JSON response: ${rawText.slice(0, 500)}`
+          `Gemini returned a non-JSON response: ${rawText.slice(
+            0,
+            500
+          )}`
         );
       }
 
@@ -152,11 +158,6 @@ async function callGemini(prompt) {
       const text = getModelText(data);
 
       if (!text) {
-        console.error(
-          "Gemini response contained no text:",
-          data
-        );
-
         lastError = new Error(
           "Gemini returned an empty response."
         );
@@ -187,15 +188,245 @@ async function callGemini(prompt) {
 }
 
 // ============================================================
-// SCHEMAS
-// ============================================================
-// These are ONLY used inside our prompts.
-// They are NOT sent as response_format to Gemini.
-// This avoids the API error completely.
+// DIFFICULTY INSTRUCTIONS
 // ============================================================
 
-const studyPackFormat = `
+function getDifficultyInstructions(
+  difficulty
+) {
+  const level =
+    String(difficulty || "Medium")
+      .toLowerCase();
+
+  if (level === "easy") {
+    return `
+EASY LEVEL:
+
+- Use very simple student-friendly language.
+- Assume the learner is a beginner.
+- Explain basic ideas first.
+- Define technical words immediately.
+- Use simple everyday examples.
+- Avoid unnecessarily advanced terminology.
+- Focus on understanding the foundation.
+- Quiz questions should test basic recall and understanding.
+- Flashcards should focus on definitions, basic concepts and simple examples.
+`;
+  }
+
+  if (level === "hard") {
+    return `
+HARD LEVEL:
+
+- Give an advanced, detailed explanation.
+- Assume the learner already understands the fundamentals.
+- Use appropriate technical terminology.
+- Explain mechanisms and relationships between concepts.
+- Include complex or realistic examples.
+- Include applications and limitations.
+- Include comparisons where useful.
+- Connect related concepts.
+- Quiz questions should require analysis, application, relationships or exam-level reasoning.
+- Flashcards should test deeper understanding, mechanisms, comparisons and applications.
+`;
+  }
+
+  return `
+MEDIUM LEVEL:
+
+- Use clear but moderately technical language.
+- Assume the learner knows basic terminology.
+- Explain concepts with moderate depth.
+- Include technical terms with explanations.
+- Include examples and practical applications.
+- Include relationships between important concepts.
+- Quiz questions should test understanding and application.
+- Flashcards should include concepts, examples, relationships and applications.
+`;
+}
+
+// ============================================================
+// STUDY PACK PROMPT
+// ============================================================
+
+function studyPackPrompt(body) {
+  const topic =
+    body.topic?.trim() ||
+    "General Topic";
+
+  const difficulty =
+    body.difficulty ||
+    "Medium";
+
+  const material =
+    body.material?.trim() ||
+    "";
+
+  const quizStyle =
+    body.quizStyle ||
+    "Mixed";
+
+  const difficultyInstructions =
+    getDifficultyInstructions(
+      difficulty
+    );
+
+  return `
+You are Knowvia, an AI-powered study assistant.
+
+Your job is to create a COMPLETE STUDY PACK.
+
+TOPIC:
+${topic}
+
+SELECTED DIFFICULTY:
+${difficulty}
+
+QUESTION STYLE:
+${quizStyle}
+
+SOURCE MATERIAL:
+${
+  material ||
+  "No user-provided material was supplied. Use reliable general knowledge."
+}
+
+${difficultyInstructions}
+
+============================================================
+STUDY MATTER
+============================================================
+
+Create comprehensive study material.
+
+Include the following sections whenever they are applicable:
+
+1. Introduction
+2. Definition
+3. Core Concept
+4. Key Concepts
+5. Types / Classification
+6. Components / Elements
+7. Working / Process / Mechanism
+8. Important Characteristics
+9. Examples
+10. Applications
+11. Advantages
+12. Limitations / Disadvantages
+13. Comparison with Related Concepts
+14. Important Exam Points
+15. Quick Revision
+
+Do NOT force irrelevant sections onto topics where they do not apply.
+
+The content must genuinely match the selected difficulty.
+
+Easy must NOT simply be Medium with shorter sentences.
+
+Medium must contain more technical depth than Easy.
+
+Hard must contain substantially deeper technical explanation than Medium.
+
+If user-provided material exists, prioritize it.
+Do not contradict the supplied material.
+
+============================================================
+FLASHCARDS
+============================================================
+
+Create EXACTLY 10 flashcards.
+
+Every flashcard must contain:
+
+question
+answer
+
+Generate them from the study matter.
+
+The flashcards must match the selected difficulty.
+
+============================================================
+QUIZ
+============================================================
+
+Create EXACTLY 10 multiple-choice questions.
+
+Every question MUST have:
+
+- exactly 4 options
+- exactly 1 correct answer
+- correctAnswer as 0, 1, 2 or 3
+- explanation
+
+The quiz MUST be based on the study matter you generated above.
+
+Difficulty rules:
+
+Easy:
+- basic recall
+- definitions
+- simple understanding
+
+Medium:
+- understanding
+- interpretation
+- application
+- moderate reasoning
+
+Hard:
+- analysis
+- application
+- relationships
+- mechanisms
+- comparisons
+- exam-level reasoning
+
+Question style:
+${quizStyle}
+
+If the style is MCQ:
+Use standard multiple-choice questions.
+
+If the style is Exam Pattern:
+Make the questions similar to college examination preparation.
+
+If the style is Mixed:
+Mix recall, understanding and application.
+
+============================================================
+IMPORTANT JSON RULES
+============================================================
+
+Return ONLY valid JSON.
+
+Do NOT use Markdown.
+
+Do NOT add text before the JSON.
+
+Do NOT add text after the JSON.
+
+Use EXACTLY this structure:
+
 {
+  "topic": "${topic.replace(/"/g, '\\"')}",
+  "difficulty": "${difficulty}",
+  "studyMatter": {
+    "introduction": "string",
+    "definition": "string",
+    "coreConcept": "string",
+    "keyConcepts": ["string"],
+    "types": ["string"],
+    "components": ["string"],
+    "working": "string",
+    "characteristics": ["string"],
+    "examples": ["string"],
+    "applications": ["string"],
+    "advantages": ["string"],
+    "limitations": ["string"],
+    "comparison": ["string"],
+    "examPoints": ["string"],
+    "quickRevision": ["string"]
+  },
   "summary": "string",
   "keyConcepts": ["string"],
   "flashcards": [
@@ -207,141 +438,28 @@ const studyPackFormat = `
   "quiz": [
     {
       "question": "string",
-      "options": ["string", "string", "string", "string"],
+      "options": [
+        "string",
+        "string",
+        "string",
+        "string"
+      ],
       "correctAnswer": 0,
       "explanation": "string"
     }
   ]
 }
-`;
 
-const flashcardFormat = `
-{
-  "flashcards": [
-    {
-      "question": "string",
-      "answer": "string"
-    }
-  ]
-}
-`;
+FINAL CHECK BEFORE RESPONDING:
 
-const quizFormat = `
-{
-  "quiz": [
-    {
-      "question": "string",
-      "options": ["string", "string", "string", "string"],
-      "correctAnswer": 0,
-      "explanation": "string"
-    }
-  ]
-}
-`;
-
-const weakTopicsFormat = `
-{
-  "weakTopics": ["string"],
-  "explanation": "string"
-}
-`;
-
-const knowledgeMapFormat = `
-{
-  "nodes": [
-    {
-      "topic": "string",
-      "status": "Strong",
-      "reason": "string"
-    }
-  ]
-}
-`;
-
-// ============================================================
-// STUDY PACK
-// ============================================================
-
-function studyPackPrompt(body) {
-  const topic =
-    body.topic || "General Topic";
-
-  const difficulty =
-    body.difficulty || "Medium";
-
-  const material =
-    body.material || "";
-
-  const quizStyle =
-    body.quizStyle || "Mixed";
-
-  return `
-You are Knowvia, an AI study assistant.
-
-Create a complete study pack.
-
-TOPIC:
-${topic}
-
-DIFFICULTY:
-${difficulty}
-
-QUESTION STYLE:
-${quizStyle}
-
-STUDY MATERIAL:
-${
-  material ||
-  "No additional material was provided. Use reliable general knowledge."
-}
-
-Create:
-
-1. SUMMARY
-
-Give a clear and student-friendly explanation.
-
-2. KEY CONCEPTS
-
-Give the most important concepts.
-
-3. FLASHCARDS
-
-Create 8 useful flashcards.
-
-4. QUIZ
-
-Create 5 multiple-choice questions.
-
-Every question must have EXACTLY 4 options.
-
-correctAnswer MUST be a zero-based number:
-0, 1, 2, or 3.
-
-5. EXPLANATIONS
-
-Give a short explanation for each question.
-
-Question style:
-${quizStyle}
-
-If the style is Exam Pattern, make questions similar to college examination questions.
-
-If the style is MCQ, make standard MCQs.
-
-If the style is Mixed, combine recall, understanding and application.
-
-IMPORTANT:
-
-Return ONLY valid JSON.
-
-Do NOT use Markdown.
-
-Do NOT write anything before or after the JSON.
-
-Use EXACTLY this structure:
-
-${studyPackFormat}
+- Exactly 10 flashcards.
+- Exactly 10 quiz questions.
+- Exactly 4 options for every quiz question.
+- Exactly one correct option per question.
+- Every correctAnswer is 0, 1, 2 or 3.
+- Quiz is based on the generated study matter.
+- Difficulty genuinely matches ${difficulty}.
+- Return valid JSON only.
 `;
 }
 
@@ -351,37 +469,42 @@ ${studyPackFormat}
 
 function flashcardsPrompt(body) {
   return `
-You are Knowvia, an AI study assistant.
+You are Knowvia.
 
-Create 10 useful study flashcards.
+Create EXACTLY 10 flashcards from the supplied study material.
 
 TOPIC:
-${body.topic || "General Topic"}
-
-MATERIAL:
-${body.material || "Use reliable general knowledge."}
+${body.topic || "Study Topic"}
 
 DIFFICULTY:
 ${body.difficulty || "Medium"}
 
-Each flashcard needs:
-- question
-- answer
+STUDY MATERIAL:
+${body.material || "No additional material supplied."}
 
-Focus on:
-- important concepts
-- definitions
-- relationships
-- applications
-- exam points
+${getDifficultyInstructions(
+  body.difficulty
+)}
+
+Rules:
+
+- Exactly 10 flashcards.
+- Each has question and answer.
+- Do not repeat the same concept unnecessarily.
+- Cover important concepts.
+- Match the selected difficulty.
+- Use the supplied material whenever possible.
 
 Return ONLY valid JSON.
 
-Do not use Markdown.
-
-Use exactly this structure:
-
-${flashcardFormat}
+{
+  "flashcards": [
+    {
+      "question": "string",
+      "answer": "string"
+    }
+  ]
+}
 `;
 }
 
@@ -391,15 +514,12 @@ ${flashcardFormat}
 
 function quizPrompt(body) {
   return `
-You are Knowvia, an AI study assistant.
+You are Knowvia.
 
-Create 10 multiple-choice questions.
+Create EXACTLY 10 MCQ questions.
 
 TOPIC:
-${body.topic || "General Topic"}
-
-MATERIAL:
-${body.material || "Use reliable general knowledge."}
+${body.topic || "Study Topic"}
 
 DIFFICULTY:
 ${body.difficulty || "Medium"}
@@ -407,33 +527,54 @@ ${body.difficulty || "Medium"}
 QUESTION STYLE:
 ${body.quizStyle || "Mixed"}
 
+STUDY MATTER:
+${body.material || "No additional material supplied."}
+
+${getDifficultyInstructions(
+  body.difficulty
+)}
+
 Rules:
 
+- Exactly 10 questions.
 - Exactly 4 options per question.
-- Only one option is correct.
+- Exactly one correct answer.
 - correctAnswer must be 0, 1, 2 or 3.
-- Include an explanation.
+- Include explanation.
 - Avoid ambiguous questions.
+- Questions must be based on the supplied study matter.
 
 Return ONLY valid JSON.
 
-Do not use Markdown.
-
-Use exactly this structure:
-
-${quizFormat}
+{
+  "quiz": [
+    {
+      "question": "string",
+      "options": [
+        "string",
+        "string",
+        "string",
+        "string"
+      ],
+      "correctAnswer": 0,
+      "explanation": "string"
+    }
+  ]
+}
 `;
 }
 
 // ============================================================
-// WEAK TOPICS
+// WEAK TOPICS + TARGETED RETEST
 // ============================================================
 
 function weakTopicsPrompt(body) {
   return `
 You are Knowvia's Weak Topic Detector.
 
-Analyze this quiz performance:
+Analyze the learner's quiz performance.
+
+QUIZ RESULTS:
 
 ${JSON.stringify(
   body.quizResults || [],
@@ -441,15 +582,40 @@ ${JSON.stringify(
   2
 )}
 
-Identify concepts where the learner appears weak.
+Identify the concepts where the learner performed poorly.
 
-Do not invent information.
+Then create a targeted re-test.
+
+Rules:
+
+- Identify weak concepts only from the supplied quiz results.
+- Do not invent performance information.
+- Create EXACTLY 5 re-test questions.
+- Every question has exactly 4 options.
+- Exactly one answer is correct.
+- Questions should focus on weak concepts.
+- correctAnswer must be 0, 1, 2 or 3.
+- Include explanation.
 
 Return ONLY valid JSON.
 
-Use exactly this structure:
-
-${weakTopicsFormat}
+{
+  "weakTopics": ["string"],
+  "explanation": "string",
+  "retestQuiz": [
+    {
+      "question": "string",
+      "options": [
+        "string",
+        "string",
+        "string",
+        "string"
+      ],
+      "correctAnswer": 0,
+      "explanation": "string"
+    }
+  ]
+}
 `;
 }
 
@@ -469,19 +635,25 @@ ${JSON.stringify(
   2
 )}
 
-For each important concept classify the learner as:
+Classify important concepts as:
 
 Strong
 Developing
 Weak
 
-Give a short reason.
+Use ONLY information supported by the quiz results.
 
 Return ONLY valid JSON.
 
-Use exactly this structure:
-
-${knowledgeMapFormat}
+{
+  "nodes": [
+    {
+      "topic": "string",
+      "status": "Strong",
+      "reason": "string"
+    }
+  ]
+}
 `;
 }
 
@@ -491,38 +663,46 @@ ${knowledgeMapFormat}
 
 function textPrompt(task, body) {
   const topic =
-    body.topic || "the study topic";
+    body.topic ||
+    "the current study topic";
 
   const material =
-    body.material || "";
+    body.material ||
+    "";
+
+  const difficulty =
+    body.difficulty ||
+    "Medium";
 
   if (task === "teach") {
     return `
 You are Knowvia's Teach Me tutor.
 
-Teach the student about:
-
+TOPIC:
 ${topic}
 
-Difficulty:
-${body.difficulty || "Medium"}
+DIFFICULTY:
+${difficulty}
 
-Material:
-${
-  material ||
-  "Use reliable general knowledge."
-}
+STUDY MATERIAL:
+${material || "Use reliable general knowledge."}
 
-Explain step by step using simple language.
+Teach progressively.
 
-Include:
-- simple explanation
-- examples
-- important points
-- quick check questions
-- final recap
+Do NOT simply repeat a summary.
 
-Do not make it unnecessarily complicated.
+Use this sequence:
+
+Step 1: What the learner should know first
+Step 2: Build the basic idea
+Step 3: Introduce the next concept
+Step 4: Connect the concepts
+Step 5: Give an example
+Step 6: Ask a quick check question
+Step 7: Correctly explain the expected reasoning
+Step 8: Final recap
+
+Make the teaching appropriate for ${difficulty} level.
 `;
   }
 
@@ -530,28 +710,33 @@ Do not make it unnecessarily complicated.
     return `
 You are Knowvia's Study Session coach.
 
-Create a focused study session for:
-
+TOPIC:
 ${topic}
 
-Difficulty:
-${body.difficulty || "Medium"}
+DIFFICULTY:
+${difficulty}
 
-Material:
-${
-  material ||
-  "Use reliable general knowledge."
-}
+STUDY MATERIAL:
+${material || "Use reliable general knowledge."}
 
-Include:
+Create an actionable session using:
 
-1. What to study first
-2. Important concepts
-3. Practice activity
-4. Quick self-test
-5. Final revision checklist
+1. LEARN
+What to understand first.
 
-Keep it practical.
+2. RECALL
+What to remember without looking.
+
+3. PRACTICE
+A practical activity or questions.
+
+4. REVIEW
+What to revise after practice.
+
+5. FINAL CHECK
+How the learner can test themselves.
+
+Make it progressive and practical.
 `;
   }
 
@@ -559,28 +744,29 @@ Keep it practical.
     return `
 You are Knowvia's Exam Mode.
 
-Create an exam preparation guide for:
-
+TOPIC:
 ${topic}
 
-Difficulty:
-${body.difficulty || "Medium"}
+DIFFICULTY:
+${difficulty}
 
-Material:
-${
-  material ||
-  "Use reliable general knowledge."
-}
+STUDY MATERIAL:
+${material || "Use reliable general knowledge."}
+
+Create an exam-style preparation experience.
 
 Include:
 
-- important exam areas
-- likely question types
-- practice questions
-- last-minute revision points
-- common mistakes
+1. Important exam areas
+2. High-priority concepts
+3. Likely question patterns
+4. Practice questions
+5. Application questions
+6. Common mistakes
+7. Last-minute revision checklist
 
-Make it useful for a college student.
+Match the difficulty to ${difficulty}.
+Do not simply repeat the summary.
 `;
   }
 
@@ -588,19 +774,23 @@ Make it useful for a college student.
     return `
 You are Knowvia's Ask My Notes assistant.
 
-STUDY MATERIAL:
+SUPPLIED NOTES:
 
 ${material}
 
-USER QUESTION:
+STUDENT QUESTION:
 
 ${body.question || ""}
 
-Answer using the supplied study material whenever possible.
+Answer the student's question using the supplied notes.
 
-If the answer is not present in the notes, clearly say that the supplied notes do not contain enough information.
+Rules:
 
-Do not pretend information is in the notes when it is not.
+- Prefer information explicitly present in the notes.
+- Do not pretend unsupported information is in the notes.
+- If the notes do not contain enough information, clearly say so.
+- You may explain information from the notes in simpler language.
+- Keep the answer relevant to the question.
 `;
   }
 
@@ -619,9 +809,10 @@ ${body.correctAnswer || ""}
 
 Explain:
 
-1. What the student misunderstood.
+1. What the learner misunderstood.
 2. Why the correct answer is correct.
-3. How to avoid the same mistake.
+3. What clue should have been noticed.
+4. How to avoid the same mistake next time.
 
 Be encouraging and simple.
 `;
@@ -641,7 +832,7 @@ Give a useful student-friendly response.
 }
 
 // ============================================================
-// MAIN API HANDLER
+// MAIN HANDLER
 // ============================================================
 
 export default async function handler(req, res) {
@@ -655,7 +846,6 @@ export default async function handler(req, res) {
   try {
 
     const body = req.body || {};
-
     const task = body.task;
 
     if (!task) {
@@ -711,10 +901,6 @@ export default async function handler(req, res) {
     const answer =
       await callGemini(prompt);
 
-    // ========================================================
-    // JSON TASKS
-    // ========================================================
-
     if (isJSON) {
 
       const cleaned =
@@ -745,12 +931,8 @@ export default async function handler(req, res) {
       }
     }
 
-    // ========================================================
-    // NORMAL TEXT TASKS
-    // ========================================================
-
     return send(res, 200, {
-      answer: answer
+      answer
     });
 
   } catch (error) {
