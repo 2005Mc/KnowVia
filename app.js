@@ -1,1543 +1,1697 @@
-(() => {
+/* =========================================================
+   KNOWVIA - FRONTEND
+   Gemini 3.5 Flash-Lite backend
+========================================================= */
+
 "use strict";
 
+
 /* =========================================================
-   KNOWVIA FRONTEND
-   Works with the existing Knowvia index.html.
-   No database. No localStorage. Gemini only.
-   ========================================================= */
+   STATE
+========================================================= */
 
 const state = {
   source: "topic",
   material: "",
   title: "",
-  difficulty: "Beginner",
-  questionStyle: "Mixed",
+
+  difficulty: "beginner",
+  questionStyle: "mixed",
+
   flashcards: [],
   cardIndex: 0,
+
   quiz: [],
   quizAnswers: [],
+
   lastMistake: null,
-  busy: false,
-  studyMatter: null
+
+  busy: false
 };
 
-const $ = id => document.getElementById(id);
-const all = sel => [...document.querySelectorAll(sel)];
 
-const el = {
-  topic: $("topic"),
-  typedNotes: $("typedNotes"),
-  handwrittenInput: $("handwrittenInput"),
-  handwrittenStatus: $("handwrittenStatus"),
-  pdfInput: $("pdfInput"),
-  pdfStatus: $("pdfStatus"),
-  difficulty: $("difficulty"),
-  questionStyle: $("questionStyle"),
-  generateBtn: $("generateBtn"),
-  generateStatus: $("generateStatus"),
-  summaryContent: $("summaryContent"),
-  flashcard: $("flashcard"),
-  cardQuestion: $("cardQuestion"),
-  cardAnswer: $("cardAnswer"),
-  prevCard: $("prevCard"),
-  flipCard: $("flipCard"),
-  nextCard: $("nextCard"),
-  cardProgress: $("cardProgress"),
-  quizContainer: $("quizContainer"),
-  insights: $("insights"),
-  understandingBar: $("understandingBar"),
-  understandingScore: $("understandingScore"),
-  recallBar: $("recallBar"),
-  recallScore: $("recallScore"),
-  applicationBar: $("applicationBar"),
-  applicationScore: $("applicationScore"),
-  weakTopicsContent: $("weakTopicsContent"),
-  weakTopicsBtn: $("weakTopicsBtn"),
-  mistakeContent: $("mistakeContent"),
-  explainMistakeBtn: $("explainMistakeBtn"),
-  knowledgeMapContent: $("knowledgeMapContent"),
-  knowledgeMapBtn: $("knowledgeMapBtn"),
-  teachBtn: $("teachBtn"),
-  studySessionBtn: $("studySessionBtn"),
-  examModeBtn: $("examModeBtn"),
-  askNotesBtn: $("askNotesBtn"),
-  featureOutput: $("featureOutput"),
-  themeBtn: $("themeBtn")
-};
+/* =========================================================
+   ELEMENTS
+========================================================= */
 
-function setStatus(message, type = "") {
-  if (!el.generateStatus) return;
-  el.generateStatus.textContent = message || "";
-  el.generateStatus.dataset.type = type;
-}
+const $ = (id) => document.getElementById(id);
 
-function setBusy(value) {
-  state.busy = value;
-  if (el.generateBtn) {
-    el.generateBtn.disabled = value;
-    el.generateBtn.textContent = value
-      ? "Generating..."
-      : "Generate Study Pack  →";
+const topicInput = $("topic");
+const typedNotes = $("typedNotes");
+
+const difficultyInput = $("difficulty");
+const questionStyleInput = $("questionStyle");
+
+const generateBtn = $("generateBtn");
+const generateStatus = $("generateStatus");
+
+const summaryContent = $("summaryContent");
+
+const flashcard = $("flashcard");
+const cardQuestion = $("cardQuestion");
+const cardAnswer = $("cardAnswer");
+const prevCard = $("prevCard");
+const flipCard = $("flipCard");
+const nextCard = $("nextCard");
+const cardProgress = $("cardProgress");
+
+const quizContainer = $("quizContainer");
+
+const understandingBar = $("understandingBar");
+const understandingScore = $("understandingScore");
+
+const recallBar = $("recallBar");
+const recallScore = $("recallScore");
+
+const applicationBar = $("applicationBar");
+const applicationScore = $("applicationScore");
+
+const studyDnaBtn = $("studyDnaBtn");
+const studyDnaContent = $("studyDnaContent");
+
+const weakTopicsBtn = $("weakTopicsBtn");
+const weakTopicsContent = $("weakTopicsContent");
+
+const explainMistakeBtn = $("explainMistakeBtn");
+const mistakeContent = $("mistakeContent");
+
+const knowledgeMapBtn = $("knowledgeMapBtn");
+const knowledgeMapContent = $("knowledgeMapContent");
+
+const themeBtn = $("themeBtn");
+
+
+/* =========================================================
+   THEME
+   No localStorage
+========================================================= */
+
+themeBtn?.addEventListener("click", () => {
+
+  document.body.classList.toggle("dark");
+
+  themeBtn.textContent =
+    document.body.classList.contains("dark")
+      ? "☀"
+      : "☾";
+});
+
+
+/* =========================================================
+   SOURCE TABS
+========================================================= */
+
+document.querySelectorAll(".source-tab").forEach((tab) => {
+
+  tab.addEventListener("click", () => {
+
+    document.querySelectorAll(".source-tab")
+      .forEach((item) => item.classList.remove("active"));
+
+    document.querySelectorAll(".source-panel")
+      .forEach((panel) => panel.classList.remove("active"));
+
+    tab.classList.add("active");
+
+    state.source = tab.dataset.source;
+
+    const panel = $(`${state.source}Panel`);
+
+    if (panel) {
+      panel.classList.add("active");
+    }
+  });
+
+});
+
+
+/* =========================================================
+   HANDWRITTEN OCR
+========================================================= */
+
+$("handwrittenInput")?.addEventListener("change", async (event) => {
+
+  const file = event.target.files?.[0];
+
+  if (!file) return;
+
+  const status = $("handwrittenStatus");
+
+  try {
+
+    status.textContent = "Reading handwriting... please wait.";
+
+    const result = await Tesseract.recognize(
+      file,
+      "eng",
+      {
+        logger: (info) => {
+
+          if (info.status === "recognizing text") {
+
+            const percent =
+              Math.round((info.progress || 0) * 100);
+
+            status.textContent =
+              `Reading handwriting... ${percent}%`;
+          }
+        }
+      }
+    );
+
+    const text = result?.data?.text?.trim() || "";
+
+    if (!text) {
+      throw new Error("No readable text was found.");
+    }
+
+    state.material = text;
+
+    status.textContent =
+      "Handwritten notes successfully converted to text.";
+
+  } catch (error) {
+
+    console.error(error);
+
+    state.material = "";
+
+    status.textContent =
+      "Could not read the handwriting. Please use a clearer image.";
   }
-}
 
-function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, c => ({
-    "&":"&amp;",
-    "<":"&lt;",
-    ">":"&gt;",
-    '"':"&quot;",
-    "'":"&#039;"
-  }[c]));
-}
+});
 
-function textToHTML(text) {
-  return escapeHTML(text || "").replace(/\n/g, "<br>");
-}
 
-function listHTML(items) {
-  if (!Array.isArray(items) || !items.length) return "";
+/* =========================================================
+   PDF TEXT EXTRACTION
+========================================================= */
 
-  return `<ul>${
-    items.map(x => `<li>${escapeHTML(x)}</li>`).join("")
-  }</ul>`;
-}
+$("pdfInput")?.addEventListener("change", async (event) => {
 
-function section(title, value) {
-  if (!value || (Array.isArray(value) && !value.length)) return "";
+  const file = event.target.files?.[0];
 
-  const content = Array.isArray(value)
-    ? listHTML(value)
-    : `<p>${textToHTML(value)}</p>`;
+  if (!file) return;
 
-  return `
-    <section class="knowvia-study-section">
-      <h3>${escapeHTML(title)}</h3>
-      ${content}
-    </section>
-  `;
-}
+  const status = $("pdfStatus");
 
-function injectQuizStyles() {
-  if ($("knowviaRuntimeStyles")) return;
+  try {
 
-  const style = document.createElement("style");
+    status.textContent = "Reading PDF...";
 
-  style.id = "knowviaRuntimeStyles";
+    const buffer = await file.arrayBuffer();
 
-  style.textContent = `
-    #quizContainer {
-      display:block !important;
-      width:100% !important;
+    const pdfjsLib =
+      await import(
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs"
+      );
+
+    const pdf = await pdfjsLib.getDocument({
+      data: buffer
+    }).promise;
+
+    let text = "";
+
+    for (let pageNumber = 1;
+         pageNumber <= pdf.numPages;
+         pageNumber++) {
+
+      const page =
+        await pdf.getPage(pageNumber);
+
+      const content =
+        await page.getTextContent();
+
+      const pageText =
+        content.items
+          .map(item => item.str || "")
+          .join(" ");
+
+      text += pageText + "\n\n";
+
+      status.textContent =
+        `Reading PDF... page ${pageNumber}/${pdf.numPages}`;
     }
 
-    #quizContainer .kv-quiz-card {
-      display:block !important;
-      width:100% !important;
-      box-sizing:border-box !important;
-      margin:0 0 22px !important;
-      padding:22px !important;
-      border-radius:18px !important;
-      border:1px solid rgba(100,116,139,.22) !important;
-      background:var(--card-bg, #fff) !important;
-      overflow:hidden !important;
+    text = text.trim();
+
+    if (!text) {
+
+      throw new Error(
+        "This PDF does not contain selectable text."
+      );
     }
 
-    #quizContainer .kv-question {
-      display:block !important;
-      margin:0 0 18px !important;
-      font-size:1.05rem !important;
-      line-height:1.55 !important;
-    }
+    state.material = text;
 
-    #quizContainer .kv-options {
-      display:flex !important;
-      flex-direction:column !important;
-      gap:10px !important;
-      width:100% !important;
-    }
+    status.textContent =
+      `PDF successfully read (${pdf.numPages} pages).`;
 
-    #quizContainer .kv-option {
-      display:flex !important;
-      align-items:flex-start !important;
-      gap:10px !important;
-      width:100% !important;
-      box-sizing:border-box !important;
-      padding:13px 15px !important;
-      border:1px solid rgba(100,116,139,.25) !important;
-      border-radius:12px !important;
-      background:transparent !important;
-      cursor:pointer !important;
-      text-align:left !important;
-      white-space:normal !important;
-      line-height:1.45 !important;
-    }
+  } catch (error) {
 
-    #quizContainer .kv-option input {
-      flex:0 0 auto !important;
-      margin-top:3px !important;
-    }
+    console.error(error);
 
-    #quizContainer .kv-option.correct {
-      border-color:#16a34a !important;
-    }
+    state.material = "";
 
-    #quizContainer .kv-option.wrong {
-      border-color:#dc2626 !important;
-    }
+    status.textContent =
+      error.message ||
+      "Could not read this PDF.";
+  }
 
-    #quizContainer .kv-feedback {
-      margin-top:14px !important;
-      padding:13px 15px !important;
-      border-radius:12px !important;
-      line-height:1.5 !important;
-    }
+});
 
-    #quizContainer .kv-explanation {
-      margin-top:10px !important;
-      line-height:1.5 !important;
-    }
 
-    #featureOutput {
-      white-space:normal !important;
-      line-height:1.65 !important;
-    }
-
-    #featureOutput h3 {
-      margin-top:18px;
-    }
-
-    .kv-map-node {
-      padding:14px;
-      border:1px solid rgba(100,116,139,.22);
-      border-radius:14px;
-      margin:10px 0;
-    }
-
-    .kv-tool-row {
-      display:flex;
-      flex-wrap:wrap;
-      gap:10px;
-      margin:15px 0;
-    }
-
-    .kv-tool-row button {
-      cursor:pointer;
-    }
-  `;
-
-  document.head.appendChild(style);
-}
+/* =========================================================
+   API CALL
+========================================================= */
 
 async function callKnowviaAI(payload) {
+
   const response = await fetch("/api/chat", {
+
     method: "POST",
+
     headers: {
-      "Content-Type":"application/json"
+      "Content-Type": "application/json"
     },
+
     body: JSON.stringify(payload)
   });
 
+
+  /*
+     Read as text first.
+
+     This prevents the confusing:
+     "server returned invalid response"
+
+     and gives us the actual server error.
+  */
+
   const raw = await response.text();
 
-  let data = {};
+  let data;
 
   try {
+
     data = raw ? JSON.parse(raw) : {};
-  } catch {
+
+  } catch (error) {
+
+    console.error("Raw server response:", raw);
+
     throw new Error(
-      `Server returned non-JSON data (${response.status}). Please redeploy the latest api/chat.js.`
+      `Server error (${response.status}). Please redeploy the API.`
     );
   }
+
 
   if (!response.ok) {
+
     throw new Error(
-      data.error || `AI request failed (${response.status}).`
+      data.error ||
+      `AI request failed (${response.status}).`
     );
   }
 
-  return data;
-}
-
-function responseValue(data) {
-  if (data?.result !== undefined) return data.result;
-
-  if (data?.answer !== undefined) return data.answer;
 
   return data;
 }
 
-function currentMaterial() {
-  return state.material || "";
-}
 
-function renderSummary() {
-  const sm = state.studyMatter || {};
+/* =========================================================
+   JSON EXTRACTION
+========================================================= */
 
-  if (!el.summaryContent) return;
+function extractJSON(data) {
 
-  el.summaryContent.innerHTML =
-    section("Introduction", sm.introduction) +
-    section("Definition", sm.definition) +
-    section("Core Concept", sm.coreConcept) +
-    section("Key Concepts", sm.keyConcepts) +
-    section("Types", sm.types) +
-    section("Components", sm.components) +
-    section("How It Works", sm.working) +
-    section("Characteristics", sm.characteristics) +
-    section("Examples", sm.examples) +
-    section("Applications", sm.applications) +
-    section("Advantages", sm.advantages) +
-    section("Limitations", sm.limitations) +
-    section("Comparison", sm.comparison) +
-    section("Important Exam Points", sm.importantExamPoints) +
-    section("Quick Revision", sm.quickRevision);
-}
+  if (!data) {
+    throw new Error("Empty AI response.");
+  }
 
-function renderFlashcard() {
-  if (!el.cardQuestion || !el.cardAnswer) return;
 
-  if (!state.flashcards.length) {
-    el.cardQuestion.textContent =
-      "Generate a study pack to create flashcards.";
+  if (
+    typeof data === "object" &&
+    !Array.isArray(data) &&
+    (
+      data.summary ||
+      data.flashcards ||
+      data.quiz ||
+      data.studyDNA ||
+      data.weakTopics ||
+      data.nodes
+    )
+  ) {
+    return data;
+  }
 
-    el.cardAnswer.textContent = "";
 
-    if (el.cardProgress) {
-      el.cardProgress.textContent = "";
+  let text = "";
+
+  if (typeof data === "string") {
+    text = data;
+  }
+
+  else if (typeof data.answer === "string") {
+    text = data.answer;
+  }
+
+  else if (typeof data.result === "string") {
+    text = data.result;
+  }
+
+
+  if (!text) {
+    throw new Error("AI returned an empty response.");
+  }
+
+
+  text = text
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+
+    const first =
+      text.indexOf("{");
+
+    const last =
+      text.lastIndexOf("}");
+
+    if (first >= 0 && last > first) {
+
+      return JSON.parse(
+        text.slice(first, last + 1)
+      );
     }
 
-    return;
+    throw new Error(
+      "The AI returned an invalid JSON response."
+    );
   }
-
-  const card = state.flashcards[state.cardIndex];
-
-  el.cardQuestion.textContent = card.question;
-  el.cardAnswer.textContent = card.answer;
-
-  if (el.cardProgress) {
-    el.cardProgress.textContent =
-      `${state.cardIndex + 1} / ${state.flashcards.length}`;
-  }
-
-  el.flashcard?.classList.remove("flipped");
 }
 
-function renderQuiz() {
-  if (!el.quizContainer) return;
 
-  if (!state.quiz.length) {
-    el.quizContainer.innerHTML =
-      "<p>Generate a study pack to start the quiz.</p>";
+/* =========================================================
+   TEXT EXTRACTION
+========================================================= */
 
-    return;
+function extractText(data) {
+
+  if (!data) {
+    return "";
   }
 
-  el.quizContainer.innerHTML = state.quiz.map((q, i) => `
-    <article class="kv-quiz-card" data-question="${i}">
+  if (typeof data === "string") {
+    return data;
+  }
 
-      <div class="kv-question">
-        <strong>${i + 1}.</strong>
-        ${escapeHTML(q.question)}
-      </div>
+  if (typeof data.answer === "string") {
+    return data.answer;
+  }
 
-      <div class="kv-options">
+  if (typeof data.result === "string") {
+    return data.result;
+  }
 
-        ${q.options.map((option, j) => `
-          <label class="kv-option" data-option="${j}">
-
-            <input
-              type="radio"
-              name="quiz-${i}"
-              value="${j}"
-            >
-
-            <span>${escapeHTML(option)}</span>
-
-          </label>
-        `).join("")}
-
-      </div>
-
-      <div class="kv-feedback" hidden></div>
-
-      <div class="kv-explanation" hidden></div>
-
-    </article>
-  `).join("");
-
-  el.quizContainer
-    .querySelectorAll("input[type=radio]")
-    .forEach(input => {
-
-      input.addEventListener("change", () => {
-
-        const i =
-          Number(
-            input.closest(".kv-quiz-card").dataset.question
-          );
-
-        answerQuiz(i, Number(input.value));
-      });
-
-    });
+  return "";
 }
 
-function answerQuiz(index, answer) {
-  const q = state.quiz[index];
 
-  if (!q) return;
+/* =========================================================
+   GET SOURCE
+========================================================= */
 
-  const card =
-    el.quizContainer.querySelector(
-      `[data-question="${index}"]`
-    );
+function getSourceData() {
 
-  const feedback =
-    card?.querySelector(".kv-feedback");
+  if (state.source === "topic") {
 
-  const explanation =
-    card?.querySelector(".kv-explanation");
+    const topic =
+      topicInput.value.trim();
 
-  const options =
-    [...card.querySelectorAll(".kv-option")];
+    if (!topic) {
+      throw new Error("Please enter a topic.");
+    }
 
-  state.quizAnswers[index] = answer;
-
-  options.forEach((o, j) => {
-
-    o.classList.toggle(
-      "correct",
-      j === Number(q.correctAnswer)
-    );
-
-    o.classList.toggle(
-      "wrong",
-      j === answer &&
-      j !== Number(q.correctAnswer)
-    );
-
-  });
-
-  const correct =
-    answer === Number(q.correctAnswer);
-
-  if (feedback) {
-
-    feedback.hidden = false;
-
-    feedback.innerHTML = correct
-      ? "<strong>✓ Correct</strong>"
-      : "<strong>✗ Not quite.</strong>";
-  }
-
-  if (explanation) {
-
-    explanation.hidden = false;
-
-    explanation.innerHTML =
-      `<strong>Explanation:</strong> ${escapeHTML(q.explanation)}`;
-  }
-
-  if (!correct) {
-
-    state.lastMistake = {
-      question: q.question,
-      selectedAnswer: q.options[answer],
-      correctAnswer:
-        q.options[Number(q.correctAnswer)],
-      explanation: q.explanation
+    return {
+      title: topic,
+      material: topic
     };
   }
 
-  calculateInsights();
-}
 
-function calculateInsights() {
-  if (!state.quiz.length) return;
+  if (state.source === "typed") {
 
-  const answered =
-    state.quizAnswers.filter(
-      v => v !== undefined
-    ).length;
+    const notes =
+      typedNotes.value.trim();
 
-  const correct =
-    state.quizAnswers.reduce(
-      (n, a, i) =>
-        n +
-        (
-          a !== undefined &&
-          a === Number(state.quiz[i].correctAnswer)
-            ? 1
-            : 0
-        ),
-      0
-    );
+    if (!notes) {
+      throw new Error("Please enter your notes.");
+    }
 
-  const accuracy =
-    answered
-      ? Math.round(correct / answered * 100)
-      : 0;
-
-  const recall =
-    answered
-      ? Math.min(
-          100,
-          Math.round(
-            accuracy * .9 +
-            answered / state.quiz.length * 10
-          )
-        )
-      : 0;
-
-  const application =
-    answered
-      ? Math.min(
-          100,
-          Math.round(
-            accuracy * .8 +
-            (
-              state.difficulty
-                .toLowerCase()
-                .includes("hard")
-                ? 15
-                : 8
-            )
-          )
-        )
-      : 0;
-
-  setMetric(
-    el.understandingBar,
-    el.understandingScore,
-    accuracy
-  );
-
-  setMetric(
-    el.recallBar,
-    el.recallScore,
-    recall
-  );
-
-  setMetric(
-    el.applicationBar,
-    el.applicationScore,
-    application
-  );
-
-  if (el.insights) {
-
-    el.insights.textContent =
-      answered
-        ? `${correct}/${answered} answered correctly (${accuracy}%). Keep practising the questions you missed.`
-        : "Answer the quiz to see your learning insights.";
-  }
-}
-
-function setMetric(bar, score, value) {
-
-  if (bar) {
-    bar.style.width = `${value}%`;
+    return {
+      title: "Typed Notes",
+      material: notes
+    };
   }
 
-  if (score) {
-    score.textContent = `${value}%`;
+
+  if (state.source === "handwritten") {
+
+    if (!state.material) {
+      throw new Error(
+        "Please upload handwritten notes first."
+      );
+    }
+
+    return {
+      title: "Handwritten Notes",
+      material: state.material
+    };
   }
+
+
+  if (state.source === "pdf") {
+
+    if (!state.material) {
+      throw new Error(
+        "Please upload and read a PDF first."
+      );
+    }
+
+    return {
+      title: "PDF Notes",
+      material: state.material
+    };
+  }
+
+
+  throw new Error("Please choose a source.");
 }
 
-function cleanText(value) {
-  return String(value ?? "").trim();
-}
+
+/* =========================================================
+   GENERATE STUDY PACK
+========================================================= */
+
+generateBtn?.addEventListener(
+  "click",
+  generateStudyPack
+);
+
 
 async function generateStudyPack() {
 
   if (state.busy) return;
 
-  const source = state.source;
-
-  let material = "";
-  let title = "";
-
-  if (source === "topic") {
-
-    title =
-      cleanText(el.topic?.value);
-
-    material = title;
-
-  } else if (source === "typed") {
-
-    material =
-      cleanText(el.typedNotes?.value);
-
-    title =
-      material.slice(0, 70) ||
-      "Typed Notes";
-
-  } else if (source === "handwritten") {
-
-    material =
-      cleanText(
-        el.handwrittenInput?.dataset.extractedText
-      );
-
-    title =
-      material.slice(0, 70) ||
-      "Handwritten Notes";
-
-  } else if (source === "pdf") {
-
-    material =
-      cleanText(
-        el.pdfInput?.dataset.extractedText
-      );
-
-    title =
-      material.slice(0, 70) ||
-      "PDF Notes";
-  }
-
-  if (!material) {
-
-    setStatus(
-      "Please provide a topic, notes, handwritten image, or PDF first.",
-      "error"
-    );
-
-    return;
-  }
-
-  state.material = material;
-  state.title = title;
-
-  state.difficulty =
-    el.difficulty?.value ||
-    "Beginner";
-
-  state.questionStyle =
-    el.questionStyle?.value ||
-    "Mixed";
-
-  setBusy(true);
-
-  setStatus(
-    "Generating your study pack...",
-    "loading"
-  );
-
   try {
+
+    state.busy = true;
+
+    generateBtn.disabled = true;
+
+    generateStatus.textContent =
+      "Creating your study pack...";
+
+
+    const source =
+      getSourceData();
+
+
+    state.title = source.title;
+    state.material = source.material;
+
+    state.difficulty =
+      difficultyInput.value;
+
+    state.questionStyle =
+      questionStyleInput.value;
+
 
     const data =
       await callKnowviaAI({
+
         task: "study_pack",
-        topic: title,
-        material,
+
+        topic: source.title,
+
+        material: source.material,
+
         difficulty: state.difficulty,
-        questionStyle: state.questionStyle
+
+        quizStyle: state.questionStyle
+
       });
 
+
     const pack =
-      responseValue(data);
+      extractJSON(data);
 
-    if (
-      !pack ||
-      typeof pack !== "object"
-    ) {
-      throw new Error(
-        "Study pack response was empty."
-      );
-    }
-
-    state.studyMatter =
-      pack.studyMatter || {};
 
     state.flashcards =
       Array.isArray(pack.flashcards)
         ? pack.flashcards
         : [];
 
+    state.cardIndex = 0;
+
+
     state.quiz =
       Array.isArray(pack.quiz)
         ? pack.quiz
         : [];
 
-    state.quizAnswers = [];
+    state.quizAnswers =
+      new Array(state.quiz.length)
+        .fill(null);
 
     state.lastMistake = null;
 
-    state.cardIndex = 0;
 
-    if (
-      state.flashcards.length !== 10 ||
-      state.quiz.length !== 10
-    ) {
-      throw new Error(
-        "The AI returned an incomplete study pack. Please try again."
-      );
-    }
-
-    renderSummary();
+    renderSummary(pack.summary);
 
     renderFlashcard();
 
     renderQuiz();
 
-    clearInsights();
+    resetInsights();
 
-    setStatus(
-      "Study pack ready ✓",
-      "success"
-    );
+
+    generateStatus.textContent =
+      "Study pack ready ✓";
+
 
     document
-      .getElementById("summary")
+      .getElementById("summarySection")
       ?.scrollIntoView({
-        behavior:"smooth",
-        block:"start"
+        behavior: "smooth"
       });
+
 
   } catch (error) {
 
     console.error(error);
 
-    setStatus(
+    generateStatus.textContent =
       error.message ||
-      "Could not generate the study pack.",
-      "error"
-    );
+      "Something went wrong.";
 
   } finally {
 
-    setBusy(false);
+    state.busy = false;
+
+    generateBtn.disabled = false;
   }
 }
 
-function clearInsights() {
 
-  [
-    "understandingBar",
-    "recallBar",
-    "applicationBar"
-  ].forEach(id => {
+/* =========================================================
+   SUMMARY
+========================================================= */
 
-    if ($(id)) {
-      $(id).style.width = "0%";
-    }
+function renderSummary(summary) {
 
-  });
+  if (!summary) {
 
-  [
-    "understandingScore",
-    "recallScore",
-    "applicationScore"
-  ].forEach(id => {
-
-    if ($(id)) {
-      $(id).textContent = "0%";
-    }
-
-  });
-
-  if (el.insights) {
-    el.insights.textContent =
-      "Answer the quiz to see your learning insights.";
-  }
-
-  if (el.weakTopicsContent) {
-    el.weakTopicsContent.innerHTML = "";
-  }
-
-  if (el.mistakeContent) {
-    el.mistakeContent.innerHTML = "";
-  }
-
-  if (el.knowledgeMapContent) {
-    el.knowledgeMapContent.innerHTML = "";
-  }
-}
-
-function setFeatureOutput(html) {
-
-  if (!el.featureOutput) return;
-
-  el.featureOutput.innerHTML = html;
-
-  el.featureOutput.scrollIntoView({
-    behavior:"smooth",
-    block:"nearest"
-  });
-}
-
-async function runTextFeature(task, label) {
-
-  if (!currentMaterial()) {
-
-    setFeatureOutput(
-      "<p>Please generate a study pack first.</p>"
-    );
+    summaryContent.innerHTML =
+      `<p class="empty-state">
+        No summary was generated.
+      </p>`;
 
     return;
   }
 
-  setFeatureOutput(
-    `<p><strong>${label}</strong> is preparing...</p>`
-  );
 
-  try {
-
-    const data =
-      await callKnowviaAI({
-        task,
-        topic: state.title,
-        material: currentMaterial(),
-        difficulty: state.difficulty,
-        questionStyle: state.questionStyle
-      });
-
-    const answer =
-      String(
-        responseValue(data) || ""
-      );
-
-    setFeatureOutput(`
-      <h2>${escapeHTML(label)}</h2>
-      <div>${textToHTML(answer)}</div>
-    `);
-
-  } catch (e) {
-
-    setFeatureOutput(
-      `<p><strong>Error:</strong> ${escapeHTML(e.message)}</p>`
-    );
-  }
+  summaryContent.innerHTML = `
+    <div class="summary-text">
+      ${formatText(summary)}
+    </div>
+  `;
 }
 
-async function askMyNotes() {
 
-  if (!currentMaterial()) {
+/* =========================================================
+   FLASHCARDS
+========================================================= */
 
-    setFeatureOutput(
-      "<p>Please generate a study pack first.</p>"
-    );
+function renderFlashcard() {
+
+  flashcard.classList.remove("flipped");
+
+
+  if (!state.flashcards.length) {
+
+    cardQuestion.textContent =
+      "No flashcards available.";
+
+    cardAnswer.textContent =
+      "Generate a study pack first.";
+
+    cardProgress.textContent =
+      "0 / 0";
 
     return;
   }
 
-  const question =
-    window.prompt(
-      "What do you want to ask about your notes?"
-    );
 
-  if (!question?.trim()) return;
+  const card =
+    state.flashcards[state.cardIndex];
 
-  setFeatureOutput(
-    "<p>Searching your notes...</p>"
-  );
 
-  try {
+  cardQuestion.textContent =
+    card.question || "Question";
 
-    const data =
-      await callKnowviaAI({
-        task: "ask_notes",
-        topic: state.title,
-        material: currentMaterial(),
-        question: question.trim()
-      });
+  cardAnswer.textContent =
+    card.answer || "Answer";
 
-    setFeatureOutput(`
-      <h2>Ask My Notes</h2>
-      <p>
-        <strong>Q:</strong>
-        ${escapeHTML(question)}
-      </p>
-      <div>
-        ${textToHTML(responseValue(data))}
-      </div>
-    `);
 
-  } catch (e) {
-
-    setFeatureOutput(
-      `<p><strong>Error:</strong> ${escapeHTML(e.message)}</p>`
-    );
-  }
+  cardProgress.textContent =
+    `${state.cardIndex + 1} / ${state.flashcards.length}`;
 }
 
-async function detectWeakTopics() {
+
+prevCard?.addEventListener("click", () => {
+
+  if (!state.flashcards.length) return;
+
+  state.cardIndex =
+    Math.max(0, state.cardIndex - 1);
+
+  renderFlashcard();
+});
+
+
+nextCard?.addEventListener("click", () => {
+
+  if (!state.flashcards.length) return;
+
+  state.cardIndex =
+    Math.min(
+      state.flashcards.length - 1,
+      state.cardIndex + 1
+    );
+
+  renderFlashcard();
+});
+
+
+flipCard?.addEventListener("click", () => {
+
+  if (!state.flashcards.length) return;
+
+  flashcard.classList.toggle("flipped");
+});
+
+
+document
+  .querySelectorAll("[data-confidence]")
+  .forEach((button) => {
+
+    button.addEventListener("click", () => {
+
+      button.style.borderColor = "#2563eb";
+
+      setTimeout(() => {
+        button.style.borderColor = "";
+      }, 700);
+    });
+
+  });
+
+
+/* =========================================================
+   QUIZ
+========================================================= */
+
+function renderQuiz() {
 
   if (!state.quiz.length) {
 
-    if (el.weakTopicsContent) {
-      el.weakTopicsContent.innerHTML =
-        "<p>Complete some quiz questions first.</p>";
+    quizContainer.innerHTML = `
+      <div class="content-card">
+        <p class="empty-state">
+          No quiz questions were generated.
+        </p>
+      </div>
+    `;
+
+    return;
+  }
+
+
+  quizContainer.innerHTML = `
+
+    <div class="quiz-result">
+      <span>Quiz</span><br>
+      <strong>${state.quiz.length} Questions</strong>
+      <p>Select one answer for each question.</p>
+    </div>
+
+    ${state.quiz.map((question, index) => {
+
+      const options =
+        Array.isArray(question.options)
+          ? question.options
+          : [];
+
+
+      return `
+
+        <article class="quiz-card">
+
+          <div class="quiz-number">
+            Question ${index + 1}
+          </div>
+
+          <div class="quiz-question">
+            ${escapeHTML(question.question || "")}
+          </div>
+
+          <div class="quiz-options">
+
+            ${options.map((option, optionIndex) => `
+
+              <label
+                class="quiz-option"
+                data-question="${index}"
+                data-option="${optionIndex}">
+
+                <input
+                  type="radio"
+                  name="quiz-${index}"
+                  value="${optionIndex}"
+                  data-question="${index}"
+                  data-option="${optionIndex}"
+                >
+
+                <span>
+                  ${escapeHTML(option)}
+                </span>
+
+              </label>
+
+            `).join("")}
+
+          </div>
+
+          <div
+            class="quiz-explanation"
+            id="explanation-${index}"
+            hidden>
+          </div>
+
+        </article>
+
+      `;
+
+    }).join("")}
+
+
+    <button
+      id="submitQuiz"
+      class="quiz-submit"
+      type="button">
+      Submit Quiz
+    </button>
+
+  `;
+
+
+  quizContainer
+    .querySelectorAll("input[type=radio]")
+    .forEach((input) => {
+
+      input.addEventListener("change", () => {
+
+        const questionIndex =
+          Number(input.dataset.question);
+
+        const optionIndex =
+          Number(input.dataset.option);
+
+
+        state.quizAnswers[questionIndex] =
+          optionIndex;
+
+
+        quizContainer
+          .querySelectorAll(
+            `.quiz-option[data-question="${questionIndex}"]`
+          )
+          .forEach((label) => {
+
+            label.classList.remove("selected");
+          });
+
+
+        input
+          .closest(".quiz-option")
+          ?.classList.add("selected");
+
+      });
+
+    });
+
+
+  $("submitQuiz")
+    ?.addEventListener(
+      "click",
+      submitQuiz
+    );
+}
+
+
+/* =========================================================
+   SUBMIT QUIZ
+========================================================= */
+
+function submitQuiz() {
+
+  let correct = 0;
+
+  state.lastMistake = null;
+
+
+  state.quiz.forEach((question, index) => {
+
+    const selected =
+      state.quizAnswers[index];
+
+    const correctAnswer =
+      Number(question.correctAnswer);
+
+
+    const options =
+      quizContainer.querySelectorAll(
+        `.quiz-option[data-question="${index}"]`
+      );
+
+
+    options.forEach((label) => {
+
+      const option =
+        Number(label.dataset.option);
+
+      label.classList.remove(
+        "correct",
+        "wrong"
+      );
+
+
+      if (option === correctAnswer) {
+        label.classList.add("correct");
+      }
+
+      if (
+        selected !== null &&
+        selected !== correctAnswer &&
+        option === selected
+      ) {
+        label.classList.add("wrong");
+      }
+
+    });
+
+
+    const explanation =
+      $(`explanation-${index}`);
+
+
+    if (explanation) {
+
+      explanation.hidden = false;
+
+      explanation.textContent =
+        question.explanation ||
+        `Correct answer: ${
+          question.options?.[correctAnswer] || ""
+        }`;
     }
 
-    return;
-  }
 
-  const wrongQuestions =
-    state.quiz
-      .map((q, i) => ({
-        q,
-        answer: state.quizAnswers[i]
-      }))
-      .filter(
-        x =>
-          x.answer !== undefined &&
-          x.answer !== Number(x.q.correctAnswer)
-      )
-      .map(x => ({
-        question: x.q.question,
-        selectedAnswer:
-          x.q.options[x.answer],
+    if (selected === correctAnswer) {
+
+      correct++;
+
+    } else if (
+      selected !== null &&
+      state.lastMistake === null
+    ) {
+
+      state.lastMistake = {
+        question: question.question,
+        studentAnswer:
+          question.options?.[selected] || "No answer",
         correctAnswer:
-          x.q.options[
-            Number(x.q.correctAnswer)
-          ],
-        explanation: x.q.explanation
-      }));
+          question.options?.[correctAnswer] || "",
+        explanation:
+          question.explanation || "",
+        topic:
+          question.topic || state.title
+      };
 
-  if (!wrongQuestions.length) {
+    }
 
-    el.weakTopicsContent.innerHTML =
-      "<p>No wrong answers yet. Great work! 🎉</p>";
+  });
+
+
+  const total =
+    state.quiz.length;
+
+  const percentage =
+    total
+      ? Math.round((correct / total) * 100)
+      : 0;
+
+
+  showQuizScore(correct, total, percentage);
+
+  updateInsights(correct, total);
+
+
+  if (state.lastMistake) {
+
+    mistakeContent.innerHTML = `
+      <p>
+        You have a mistake ready to analyze.
+        Click <strong>Explain My Mistake</strong>.
+      </p>
+    `;
+
+  } else {
+
+    mistakeContent.innerHTML = `
+      <p>
+        Excellent! No incorrect answer was found.
+      </p>
+    `;
+  }
+
+
+  document
+    .getElementById("insightsSection")
+    ?.scrollIntoView({
+      behavior: "smooth"
+    });
+}
+
+
+/* =========================================================
+   QUIZ SCORE
+========================================================= */
+
+function showQuizScore(correct, total, percentage) {
+
+  const existing =
+    quizContainer.querySelector(".quiz-result");
+
+  if (!existing) return;
+
+
+  existing.innerHTML = `
+    <span>Your Quiz Score</span>
+    <br>
+    <strong>${correct} / ${total}</strong>
+    <p>${percentage}% correct</p>
+  `;
+}
+
+
+/* =========================================================
+   INSIGHTS
+========================================================= */
+
+function updateInsights(correct, total) {
+
+  const understanding =
+    total
+      ? Math.round((correct / total) * 100)
+      : 0;
+
+  const recall =
+    Math.min(
+      100,
+      understanding + 5
+    );
+
+  const application =
+    Math.max(
+      0,
+      Math.round(understanding * 0.9)
+    );
+
+
+  setProgress(
+    understandingBar,
+    understandingScore,
+    understanding
+  );
+
+  setProgress(
+    recallBar,
+    recallScore,
+    recall
+  );
+
+  setProgress(
+    applicationBar,
+    applicationScore,
+    application
+  );
+}
+
+
+function resetInsights() {
+
+  setProgress(
+    understandingBar,
+    understandingScore,
+    0
+  );
+
+  setProgress(
+    recallBar,
+    recallScore,
+    0
+  );
+
+  setProgress(
+    applicationBar,
+    applicationScore,
+    0
+  );
+
+
+  studyDnaContent.innerHTML = `
+    <p class="empty-state">
+      Complete the quiz to discover your study DNA.
+    </p>
+  `;
+
+  weakTopicsContent.innerHTML = `
+    <p class="empty-state">
+      Complete the quiz to identify weak topics.
+    </p>
+  `;
+
+  mistakeContent.innerHTML = `
+    <p class="empty-state">
+      Answer a quiz question incorrectly to analyze your mistake.
+    </p>
+  `;
+
+  knowledgeMapContent.innerHTML = `
+    <p class="empty-state">
+      Complete the quiz to build your knowledge map.
+    </p>
+  `;
+}
+
+
+function setProgress(bar, text, value) {
+
+  const safe =
+    Math.max(
+      0,
+      Math.min(100, value)
+    );
+
+  if (bar) {
+    bar.style.width = `${safe}%`;
+  }
+
+  if (text) {
+    text.textContent = `${safe}%`;
+  }
+}
+
+
+/* =========================================================
+   STUDY DNA
+========================================================= */
+
+studyDnaBtn?.addEventListener(
+  "click",
+  generateStudyDNA
+);
+
+
+async function generateStudyDNA() {
+
+  if (!state.quiz.length) {
+
+    studyDnaContent.innerHTML = `
+      <p class="empty-state">
+        Generate a study pack and complete the quiz first.
+      </p>
+    `;
 
     return;
   }
 
-  el.weakTopicsContent.innerHTML =
-    "<p>Detecting your weak topics...</p>";
+
+  studyDnaBtn.disabled = true;
+
+  studyDnaBtn.textContent =
+    "Analyzing...";
+
+
+  try {
+
+    const results =
+      buildQuizResults();
+
+
+    const data =
+      await callKnowviaAI({
+
+        task: "study_dna",
+
+        topic: state.title,
+
+        difficulty: state.difficulty,
+
+        quizResults: results
+
+      });
+
+
+    const dna =
+      extractJSON(data);
+
+
+    renderStudyDNA(dna);
+
+
+  } catch (error) {
+
+    studyDnaContent.innerHTML = `
+      <p>
+        ${escapeHTML(error.message)}
+      </p>
+    `;
+
+  } finally {
+
+    studyDnaBtn.disabled = false;
+
+    studyDnaBtn.textContent =
+      "Analyze My Study DNA";
+  }
+}
+
+
+function renderStudyDNA(dna) {
+
+  const strengths =
+    Array.isArray(dna.strengths)
+      ? dna.strengths
+      : [];
+
+  const improvements =
+    Array.isArray(dna.improvements)
+      ? dna.improvements
+      : [];
+
+
+  studyDnaContent.innerHTML = `
+
+    <div class="study-dna-grid">
+
+      <div class="dna-item">
+        <strong>Learning Profile</strong>
+        <span>
+          ${escapeHTML(dna.profile || "Not available")}
+        </span>
+      </div>
+
+      <div class="dna-item">
+        <strong>Recall Pattern</strong>
+        <span>
+          ${escapeHTML(dna.recallPattern || "Not available")}
+        </span>
+      </div>
+
+      <div class="dna-item">
+        <strong>Strengths</strong>
+        <ul>
+          ${strengths.map(
+            item => `<li>${escapeHTML(item)}</li>`
+          ).join("")}
+        </ul>
+      </div>
+
+      <div class="dna-item">
+        <strong>Improve Next</strong>
+        <ul>
+          ${improvements.map(
+            item => `<li>${escapeHTML(item)}</li>`
+          ).join("")}
+        </ul>
+      </div>
+
+    </div>
+
+    <h4>Recommended Study Method</h4>
+
+    <p>
+      ${formatText(
+        dna.recommendation ||
+        "Keep practicing with active recall."
+      )}
+    </p>
+
+  `;
+}
+
+
+/* =========================================================
+   WEAK TOPICS
+========================================================= */
+
+weakTopicsBtn?.addEventListener(
+  "click",
+  findWeakTopics
+);
+
+
+async function findWeakTopics() {
+
+  if (!state.quiz.length) {
+
+    weakTopicsContent.innerHTML = `
+      <p class="empty-state">
+        Generate a study pack and complete the quiz first.
+      </p>
+    `;
+
+    return;
+  }
+
+
+  weakTopicsBtn.disabled = true;
+
+  weakTopicsBtn.textContent =
+    "Analyzing...";
+
 
   try {
 
     const data =
       await callKnowviaAI({
+
         task: "weak_topics",
-        material: currentMaterial(),
-        wrongQuestions
+
+        topic: state.title,
+
+        quizResults:
+          buildQuizResults()
+
       });
 
+
     const result =
-      responseValue(data);
+      extractJSON(data);
 
-    const topics =
-      Array.isArray(result)
-        ? result
-        : (result?.weakTopics || []);
 
-    el.weakTopicsContent.innerHTML =
-      topics.length
-        ? `
-          <div>
-            ${topics.map(t => `
-              <div class="kv-map-node">
-                <strong>
-                  ${escapeHTML(t.topic)}
-                </strong>
+    renderWeakTopics(result);
 
-                <p>
-                  ${escapeHTML(t.reason)}
-                </p>
-              </div>
-            `).join("")}
-          </div>
-        `
-        : "<p>No clear weak topic detected yet.</p>";
 
-  } catch (e) {
+  } catch (error) {
 
-    el.weakTopicsContent.innerHTML =
-      `<p><strong>Error:</strong> ${escapeHTML(e.message)}</p>`;
+    weakTopicsContent.innerHTML = `
+      <p>
+        ${escapeHTML(error.message)}
+      </p>
+    `;
+
+  } finally {
+
+    weakTopicsBtn.disabled = false;
+
+    weakTopicsBtn.textContent =
+      "Find Weak Topics";
   }
 }
+
+
+function renderWeakTopics(result) {
+
+  const weak =
+    Array.isArray(result.weakTopics)
+      ? result.weakTopics
+      : [];
+
+
+  if (!weak.length) {
+
+    weakTopicsContent.innerHTML = `
+      <p>
+        No major weak topics detected. Keep practicing!
+      </p>
+    `;
+
+    return;
+  }
+
+
+  weakTopicsContent.innerHTML = `
+
+    <h4>Topics to revisit</h4>
+
+    <ul>
+
+      ${weak.map((item) => {
+
+        if (typeof item === "string") {
+
+          return `<li>${escapeHTML(item)}</li>`;
+        }
+
+        return `
+          <li>
+            <strong>
+              ${escapeHTML(item.topic || "Topic")}
+            </strong>
+            —
+            ${escapeHTML(
+              item.reason || "Needs more practice."
+            )}
+          </li>
+        `;
+
+      }).join("")}
+
+    </ul>
+
+  `;
+}
+
+
+/* =========================================================
+   EXPLAIN MY MISTAKE
+========================================================= */
+
+explainMistakeBtn?.addEventListener(
+  "click",
+  explainMistake
+);
+
 
 async function explainMistake() {
 
   if (!state.lastMistake) {
 
-    if (el.mistakeContent) {
-      el.mistakeContent.innerHTML =
-        "<p>Answer a quiz question incorrectly first.</p>";
-    }
+    mistakeContent.innerHTML = `
+      <p class="empty-state">
+        First answer at least one quiz question incorrectly.
+      </p>
+    `;
 
     return;
   }
 
-  el.mistakeContent.innerHTML =
-    "<p>Explaining your mistake...</p>";
+
+  explainMistakeBtn.disabled = true;
+
+  explainMistakeBtn.textContent =
+    "Explaining...";
+
 
   try {
 
     const data =
       await callKnowviaAI({
+
         task: "explain_mistake",
-        material: currentMaterial(),
-        question: state.lastMistake.question,
-        selectedAnswer:
-          state.lastMistake.selectedAnswer,
+
+        topic: state.title,
+
+        question:
+          state.lastMistake.question,
+
+        studentAnswer:
+          state.lastMistake.studentAnswer,
+
         correctAnswer:
-          state.lastMistake.correctAnswer
+          state.lastMistake.correctAnswer,
+
+        explanation:
+          state.lastMistake.explanation
+
       });
 
-    el.mistakeContent.innerHTML =
-      `<div>${textToHTML(responseValue(data))}</div>`;
 
-  } catch (e) {
+    const result =
+      extractText(data);
 
-    el.mistakeContent.innerHTML =
-      `<p><strong>Error:</strong> ${escapeHTML(e.message)}</p>`;
+
+    mistakeContent.innerHTML = `
+      <div class="summary-text">
+        ${formatText(result)}
+      </div>
+    `;
+
+
+  } catch (error) {
+
+    mistakeContent.innerHTML = `
+      <p>
+        ${escapeHTML(error.message)}
+      </p>
+    `;
+
+  } finally {
+
+    explainMistakeBtn.disabled = false;
+
+    explainMistakeBtn.textContent =
+      "Explain My Mistake";
   }
 }
+
+
+/* =========================================================
+   KNOWLEDGE MAP
+========================================================= */
+
+knowledgeMapBtn?.addEventListener(
+  "click",
+  generateKnowledgeMap
+);
+
 
 async function generateKnowledgeMap() {
 
-  if (!currentMaterial()) {
+  if (!state.quiz.length) {
 
-    el.knowledgeMapContent.innerHTML =
-      "<p>Generate a study pack first.</p>";
+    knowledgeMapContent.innerHTML = `
+      <p class="empty-state">
+        Generate a study pack and complete the quiz first.
+      </p>
+    `;
 
     return;
   }
 
-  el.knowledgeMapContent.innerHTML =
-    "<p>Building your knowledge map...</p>";
+
+  knowledgeMapBtn.disabled = true;
+
+  knowledgeMapBtn.textContent =
+    "Building...";
+
 
   try {
 
     const data =
       await callKnowviaAI({
-        task:"knowledge_map",
-        material:currentMaterial()
+
+        task: "knowledge_map",
+
+        topic: state.title,
+
+        quizResults:
+          buildQuizResults()
+
       });
 
-    const result =
-      responseValue(data);
 
-    const nodes =
-      Array.isArray(result)
-        ? result
-        : (
-            result?.knowledgeMap ||
-            result?.nodes ||
-            []
-          );
+    const map =
+      extractJSON(data);
 
-    el.knowledgeMapContent.innerHTML =
-      nodes.length
-        ? nodes.map(n => `
-            <div class="kv-map-node">
 
-              <strong>
-                ${escapeHTML(n.topic)}
-              </strong>
+    renderKnowledgeMap(map);
 
-              <p>
-                ${escapeHTML(n.description)}
-              </p>
 
-              ${
-                Array.isArray(n.relatedTo) &&
-                n.relatedTo.length
-                  ? `
-                    <small>
-                      Related:
-                      ${escapeHTML(
-                        n.relatedTo.join(", ")
-                      )}
-                    </small>
-                  `
-                  : ""
-              }
+  } catch (error) {
 
-            </div>
-          `).join("")
-        : "<p>No map data was returned.</p>";
+    knowledgeMapContent.innerHTML = `
+      <p>
+        ${escapeHTML(error.message)}
+      </p>
+    `;
 
-  } catch (e) {
+  } finally {
 
-    el.knowledgeMapContent.innerHTML =
-      `<p><strong>Error:</strong> ${escapeHTML(e.message)}</p>`;
+    knowledgeMapBtn.disabled = false;
+
+    knowledgeMapBtn.textContent =
+      "Build Knowledge Map";
   }
 }
 
-function showStudyDNA() {
 
-  if (!state.quiz.length) {
+function renderKnowledgeMap(map) {
 
-    setFeatureOutput(
-      "<p>Generate a study pack and answer the quiz to build your Study DNA.</p>"
-    );
+  const nodes =
+    Array.isArray(map.nodes)
+      ? map.nodes
+      : [];
+
+
+  if (!nodes.length) {
+
+    knowledgeMapContent.innerHTML = `
+      <p>
+        Knowledge map could not be generated.
+      </p>
+    `;
 
     return;
   }
 
-  const answered =
-    state.quizAnswers.filter(
-      x => x !== undefined
-    ).length;
 
-  const correct =
-    state.quizAnswers.reduce(
-      (n,a,i) =>
-        n +
-        (
-          a !== undefined &&
-          a === Number(
-            state.quiz[i].correctAnswer
-          )
-            ? 1
-            : 0
-        ),
-      0
-    );
+  knowledgeMapContent.innerHTML = `
 
-  const accuracy =
-    answered
-      ? Math.round(
-          correct / answered * 100
-        )
-      : 0;
+    <h4>${escapeHTML(
+      map.title || state.title
+    )}</h4>
 
-  const attemptedRate =
-    Math.round(
-      answered /
-      state.quiz.length *
-      100
-    );
+    <ul>
 
-  const confidence =
-    accuracy >= 80
-      ? "Strong"
-      : accuracy >= 60
-        ? "Developing"
-        : "Needs reinforcement";
+      ${nodes.map((node) => {
 
-  setFeatureOutput(`
-    <h2>Study DNA</h2>
+        if (typeof node === "string") {
 
-    <div class="kv-map-node">
+          return `<li>${escapeHTML(node)}</li>`;
+        }
 
-      <strong>
-        Learning profile: ${confidence}
-      </strong>
+        return `
+          <li>
+            <strong>
+              ${escapeHTML(
+                node.name || "Concept"
+              )}
+            </strong>
 
-      <p>
-        Quiz accuracy: ${accuracy}%
-      </p>
+            ${
+              node.description
+                ? ` — ${escapeHTML(node.description)}`
+                : ""
+            }
 
-      <p>
-        Questions attempted:
-        ${answered}/${state.quiz.length}
-        (${attemptedRate}%)
-      </p>
+            ${
+              Array.isArray(node.connections) &&
+              node.connections.length
+                ? `<br>
+                   <small>
+                     Connected to:
+                     ${escapeHTML(
+                       node.connections.join(", ")
+                     )}
+                   </small>`
+                : ""
+            }
 
-      <p>
-        Your next best step is to review
-        incorrect answers and run the
-        Weak Topic Detector.
-      </p>
+          </li>
+        `;
 
-    </div>
-  `);
+      }).join("")}
+
+    </ul>
+
+  `;
 }
 
-function bindSources() {
 
-  all(".source-tab").forEach(tab => {
+/* =========================================================
+   QUIZ RESULTS
+========================================================= */
 
-    tab.addEventListener("click", () => {
+function buildQuizResults() {
 
-      state.source =
-        tab.dataset.source || "topic";
+  return state.quiz.map(
+    (question, index) => {
 
-      all(".source-tab")
-        .forEach(x =>
-          x.classList.toggle(
-            "active",
-            x === tab
-          )
-        );
+      const selected =
+        state.quizAnswers[index];
 
-      [
-        "topic",
-        "typed",
-        "handwritten",
-        "pdf"
-      ].forEach(name => {
+      const correct =
+        Number(question.correctAnswer);
 
-        const panel =
-          $(`${name}Panel`);
 
-        if (panel) {
-          panel.hidden =
-            state.source !== name;
-        }
+      return {
 
-      });
-    });
-  });
-}
+        question:
+          question.question || "",
 
-async function readImageOCR(file, statusEl) {
+        topic:
+          question.topic || state.title,
 
-  if (!window.Tesseract) {
-    throw new Error(
-      "OCR library is not loaded."
-    );
-  }
+        selectedAnswer:
+          selected !== null &&
+          question.options
+            ? question.options[selected]
+            : "No answer",
 
-  if (statusEl) {
-    statusEl.textContent =
-      "Reading handwriting...";
-  }
+        correctAnswer:
+          question.options
+            ? question.options[correct]
+            : "",
 
-  const result =
-    await Tesseract.recognize(
-      file,
-      "eng",
-      {
-        logger: m => {
+        isCorrect:
+          selected === correct
 
-          if (
-            statusEl &&
-            m?.status
-          ) {
+      };
 
-            statusEl.textContent =
-              `${m.status} ${
-                Math.round(
-                  (m.progress || 0) * 100
-                )
-              }%`;
-          }
-
-        }
-      }
-    );
-
-  return cleanText(
-    result?.data?.text
-  );
-}
-
-function bindHandwritten() {
-
-  el.handwrittenInput?.addEventListener(
-    "change",
-    async () => {
-
-      const file =
-        el.handwrittenInput.files?.[0];
-
-      if (!file) return;
-
-      try {
-
-        const text =
-          await readImageOCR(
-            file,
-            el.handwrittenStatus
-          );
-
-        el.handwrittenInput
-          .dataset.extractedText =
-          text;
-
-        if (el.handwrittenStatus) {
-
-          el.handwrittenStatus.textContent =
-            text
-              ? "Handwritten notes read ✓"
-              : "No readable text found.";
-        }
-
-      } catch (e) {
-
-        if (el.handwrittenStatus) {
-          el.handwrittenStatus.textContent =
-            e.message;
-        }
-      }
     }
   );
 }
 
-async function extractPDF(file) {
 
-  if (!window.pdfjsLib) {
-    throw new Error(
-      "PDF.js is not loaded."
-    );
-  }
+/* =========================================================
+   FORMATTING
+========================================================= */
 
-  const buffer =
-    await file.arrayBuffer();
+function escapeHTML(value) {
 
-  const pdf =
-    await pdfjsLib.getDocument({
-      data:buffer
-    }).promise;
-
-  const pages = [];
-
-  for (
-    let p = 1;
-    p <= pdf.numPages;
-    p++
-  ) {
-
-    const page =
-      await pdf.getPage(p);
-
-    const content =
-      await page.getTextContent();
-
-    pages.push(
-      content.items
-        .map(x => x.str)
-        .join(" ")
-    );
-  }
-
-  const text =
-    cleanText(
-      pages.join("\n")
-    );
-
-  if (!text) {
-
-    throw new Error(
-      "This PDF has no selectable text. Please use the Handwritten Notes image option for scanned pages."
-    );
-  }
-
-  return text;
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-function bindPDF() {
 
-  el.pdfInput?.addEventListener(
-    "change",
-    async () => {
+function formatText(text) {
 
-      const file =
-        el.pdfInput.files?.[0];
-
-      if (!file) return;
-
-      try {
-
-        if (el.pdfStatus) {
-          el.pdfStatus.textContent =
-            "Reading PDF...";
-        }
-
-        const text =
-          await extractPDF(file);
-
-        el.pdfInput
-          .dataset.extractedText =
-          text;
-
-        if (el.pdfStatus) {
-
-          el.pdfStatus.textContent =
-            `PDF read successfully ✓ (${text.length} characters)`;
-        }
-
-      } catch (e) {
-
-        if (el.pdfStatus) {
-          el.pdfStatus.textContent =
-            e.message;
-        }
-      }
-    }
-  );
+  return escapeHTML(text)
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\n\n+/g, "</p><p>")
+    .replace(/\n/g, "<br>");
 }
 
-function bindFlashcards() {
 
-  el.prevCard?.addEventListener(
-    "click",
-    () => {
+/* =========================================================
+   INITIAL STATE
+========================================================= */
 
-      if (!state.flashcards.length) return;
+resetInsights();
 
-      state.cardIndex =
-        (
-          state.cardIndex -
-          1 +
-          state.flashcards.length
-        ) %
-        state.flashcards.length;
-
-      renderFlashcard();
-    }
-  );
-
-  el.nextCard?.addEventListener(
-    "click",
-    () => {
-
-      if (!state.flashcards.length) return;
-
-      state.cardIndex =
-        (
-          state.cardIndex +
-          1
-        ) %
-        state.flashcards.length;
-
-      renderFlashcard();
-    }
-  );
-
-  el.flipCard?.addEventListener(
-    "click",
-    () =>
-      el.flashcard?.classList.toggle(
-        "flipped"
-      )
-  );
-
-  all("[data-confidence]").forEach(
-    btn =>
-      btn.addEventListener(
-        "click",
-        () => {
-
-          btn.parentElement
-            ?.querySelectorAll(
-              "[data-confidence]"
-            )
-            .forEach(
-              x =>
-                x.classList.remove(
-                  "selected"
-                )
-            );
-
-          btn.classList.add(
-            "selected"
-          );
-        }
-      )
-  );
-}
-
-function bindFeatures() {
-
-  el.generateBtn?.addEventListener(
-    "click",
-    generateStudyPack
-  );
-
-  el.weakTopicsBtn?.addEventListener(
-    "click",
-    detectWeakTopics
-  );
-
-  el.explainMistakeBtn?.addEventListener(
-    "click",
-    explainMistake
-  );
-
-  el.knowledgeMapBtn?.addEventListener(
-    "click",
-    generateKnowledgeMap
-  );
-
-  el.teachBtn?.addEventListener(
-    "click",
-    () =>
-      runTextFeature(
-        "teach",
-        "Teach Me"
-      )
-  );
-
-  el.studySessionBtn?.addEventListener(
-    "click",
-    () =>
-      runTextFeature(
-        "study_session",
-        "Study Session"
-      )
-  );
-
-  el.examModeBtn?.addEventListener(
-    "click",
-    () =>
-      runTextFeature(
-        "exam",
-        "Exam Mode"
-      )
-  );
-
-  el.askNotesBtn?.addEventListener(
-    "click",
-    askMyNotes
-  );
-
-  [
-    "studyDnaBtn",
-    "studyDNABtn",
-    "studyDna",
-    "studyDNA"
-  ].forEach(id => {
-
-    const b = $(id);
-
-    b?.addEventListener(
-      "click",
-      showStudyDNA
-    );
-  });
-}
-
-function bindTheme() {
-
-  el.themeBtn?.addEventListener(
-    "click",
-    () => {
-
-      document.body.classList.toggle(
-        "dark"
-      );
-
-      document.documentElement.classList.toggle(
-        "dark"
-      );
-    }
-  );
-}
-
-document.addEventListener(
-  "DOMContentLoaded",
-  () => {
-
-    injectQuizStyles();
-
-    bindSources();
-
-    bindHandwritten();
-
-    bindPDF();
-
-    bindFlashcards();
-
-    bindFeatures();
-
-    bindTheme();
-
-    renderFlashcard();
-
-    renderQuiz();
-
-    clearInsights();
-  }
-);
-
-})();
+renderFlashcard();
