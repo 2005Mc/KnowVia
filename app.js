@@ -1,6 +1,6 @@
 /* =========================================================
    KNOWVIA - AI STUDY COMPANION
-   Corrected AI Frontend
+   Polished Frontend
    ========================================================= */
 
 (() => {
@@ -13,13 +13,18 @@
     material: "",
     title: "",
     difficulty: "beginner",
+    quizStyle: "mixed",
+
     flashcards: [],
     cardIndex: 0,
+
     quiz: [],
     quizAnswers: [],
     lastMistake: null,
+
     busy: false
   };
+
 
   /* =========================================================
      EXISTING HTML ELEMENTS
@@ -28,14 +33,19 @@
   const els = {
     themeBtn: $("themeBtn"),
 
-    topicInput: $("topicInput") || $("topic"),
+    topicInput: $("topic"),
 
-    difficultyInput:
-      $("difficultyInput") || $("difficulty"),
+    difficultyInput: $("difficulty"),
+
+    quizStyleInput: $("quizStyle"),
 
     generateBtn: $("generateBtn"),
 
+    statusMessage: $("statusMessage"),
+
     summaryContent: $("summaryContent"),
+    summaryTitle: $("summaryTitle"),
+    sourcePill: $("sourcePill"),
 
     flashcard: $("flashcard"),
     cardQuestion: $("cardQuestion"),
@@ -43,12 +53,32 @@
 
     prevCard: $("prevCard"),
     nextCard: $("nextCard"),
-
     cardProgress: $("cardProgress"),
     flipCard: $("flipCard"),
 
     quizContainer: $("quizContainer"),
-    quizSection: $("quiz")
+
+    teachBtn: $("teachBtn"),
+    sessionBtn: $("sessionBtn"),
+    examBtn: $("examBtn"),
+    notesAskBtn: $("notesAskBtn"),
+
+    retryWeakBtn: $("retryWeakBtn"),
+
+    dnaText: $("dnaText"),
+    understandingBar: $("understandingBar"),
+    recallBar: $("recallBar"),
+    applicationBar: $("applicationBar"),
+
+    weakTopic: $("weakTopic"),
+    mistakeText: $("mistakeText"),
+    knowledgeMap: $("knowledgeMap"),
+
+    modal: $("modal"),
+    modalClose: $("modalClose"),
+    modalContent: $("modalContent"),
+
+    toast: $("toast")
   };
 
 
@@ -66,13 +96,6 @@
   }
 
 
-  function getDifficulty() {
-    return String(
-      els.difficultyInput?.value || "beginner"
-    ).toLowerCase();
-  }
-
-
   function getTopic() {
     return String(
       els.topicInput?.value || ""
@@ -80,16 +103,22 @@
   }
 
 
-  function getCurrentTitle() {
-    return (
-      state.title ||
-      getTopic() ||
-      "Study Topic"
-    );
+  function getDifficulty() {
+    return String(
+      els.difficultyInput?.value || "beginner"
+    ).toLowerCase();
+  }
+
+
+  function getQuizStyle() {
+    return String(
+      els.quizStyleInput?.value || "mixed"
+    ).toLowerCase();
   }
 
 
   function difficultyLabel(level = getDifficulty()) {
+
     const labels = {
       beginner: "Beginner",
       intermediate: "Intermediate",
@@ -100,51 +129,72 @@
   }
 
 
-  function setBusy(button, busy, busyText = "Working...") {
-    if (!button) return;
+  function sourceLabel() {
 
-    if (busy) {
-      button.dataset.originalText =
-        button.textContent;
+    const labels = {
+      topic: "Topic",
+      notes: "Typed Notes",
+      image: "Handwritten Notes",
+      pdf: "PDF"
+    };
 
-      button.disabled = true;
-      button.textContent = busyText;
-    } else {
-      button.disabled = false;
-
-      button.textContent =
-        button.dataset.originalText ||
-        button.textContent;
-    }
+    return labels[state.source] || "Study Material";
   }
 
 
   function toast(message, type = "info") {
-    let box = $("kvToast");
 
-    if (!box) {
-      box = document.createElement("div");
-      box.id = "kvToast";
+    if (!els.toast) return;
 
-      document.body.appendChild(box);
+    els.toast.textContent = message;
+
+    els.toast.className =
+      `toast show ${type}`;
+
+    clearTimeout(els.toast._timer);
+
+    els.toast._timer =
+      setTimeout(() => {
+
+        els.toast.classList.remove("show");
+
+      }, 3500);
+  }
+
+
+  function setBusy(button, busy, text = "Generating...") {
+
+    if (!button) return;
+
+    if (busy) {
+
+      button.dataset.originalText =
+        button.innerHTML;
+
+      button.disabled = true;
+
+      button.innerHTML = `
+        <span class="kv-spinner"></span>
+        <span>${text}</span>
+      `;
+
+    } else {
+
+      button.disabled = false;
+
+      button.innerHTML =
+        button.dataset.originalText ||
+        "Generate Study Pack";
     }
-
-    box.className = `kv-toast ${type}`;
-    box.textContent = message;
-
-    clearTimeout(box._timer);
-
-    box._timer = setTimeout(() => {
-      box.remove();
-    }, 3500);
   }
 
 
   /* =========================================================
-     MARKDOWN FORMATTER
+     MARKDOWN
      ========================================================= */
 
   function formatMarkdown(text) {
+
     if (!text) {
       return "<p>No response received.</p>";
     }
@@ -186,7 +236,9 @@
       if (/^\s*[-*•]\s+/.test(line)) {
 
         if (!inList) {
+
           html += "<ul>";
+
           inList = true;
         }
 
@@ -202,11 +254,14 @@
       } else {
 
         if (inList) {
+
           html += "</ul>";
+
           inList = false;
         }
 
         if (line.trim()) {
+
           html += `<p>${line}</p>`;
         }
       }
@@ -234,9 +289,8 @@
       return text;
     }
 
-    let cleaned = text.trim();
-
-    cleaned = cleaned
+    let cleaned = text
+      .trim()
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
       .replace(/\s*```$/i, "")
@@ -245,26 +299,6 @@
     try {
       return JSON.parse(cleaned);
     } catch (_) {}
-
-    const firstBrace =
-      cleaned.indexOf("{");
-
-    const lastBrace =
-      cleaned.lastIndexOf("}");
-
-    if (
-      firstBrace !== -1 &&
-      lastBrace > firstBrace
-    ) {
-      try {
-        return JSON.parse(
-          cleaned.slice(
-            firstBrace,
-            lastBrace + 1
-          )
-        );
-      } catch (_) {}
-    }
 
     const firstBracket =
       cleaned.indexOf("[");
@@ -276,13 +310,39 @@
       firstBracket !== -1 &&
       lastBracket > firstBracket
     ) {
+
       try {
+
         return JSON.parse(
           cleaned.slice(
             firstBracket,
             lastBracket + 1
           )
         );
+
+      } catch (_) {}
+    }
+
+    const firstBrace =
+      cleaned.indexOf("{");
+
+    const lastBrace =
+      cleaned.lastIndexOf("}");
+
+    if (
+      firstBrace !== -1 &&
+      lastBrace > firstBrace
+    ) {
+
+      try {
+
+        return JSON.parse(
+          cleaned.slice(
+            firstBrace,
+            lastBrace + 1
+          )
+        );
+
       } catch (_) {}
     }
 
@@ -293,36 +353,43 @@
 
 
   /* =========================================================
-     API CALL
+     API
      ========================================================= */
 
   async function callKnowviaAI(payload) {
 
-    const response = await fetch(
-      "/api/chat",
-      {
-        method: "POST",
+    const response =
+      await fetch(
+        "/api/chat",
+        {
+          method: "POST",
 
-        headers: {
-          "Content-Type":
-            "application/json"
-        },
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
 
-        body: JSON.stringify(payload)
-      }
-    );
+          body:
+            JSON.stringify(payload)
+        }
+      );
 
     let data = {};
 
     try {
-      data = await response.json();
+
+      data =
+        await response.json();
+
     } catch (_) {
+
       throw new Error(
         "The AI server returned an invalid response."
       );
     }
 
     if (!response.ok) {
+
       throw new Error(
         data.error ||
         "AI request failed."
@@ -330,6 +397,7 @@
     }
 
     if (!data.answer) {
+
       throw new Error(
         "AI returned an empty response."
       );
@@ -339,584 +407,194 @@
   }
 
 
-  function ensureTopic() {
+  /* =========================================================
+     SOURCE TABS
+     IMPORTANT:
+     Uses the buttons already present in index.html.
+     No duplicate buttons are created.
+     ========================================================= */
 
-    const topic = getTopic();
+  function setupSourceTabs() {
 
-    if (!topic && !state.material) {
-      throw new Error(
-        "Please enter a topic or upload notes first."
+    const tabs =
+      document.querySelectorAll(
+        ".source-tab"
       );
-    }
 
-    return topic ||
-      "Uploaded Study Material";
-  }
+    tabs.forEach(tab => {
 
-
-  function ensureMaterial() {
-    return (
-      state.material ||
-      getTopic()
-    );
-  }
-
-
-  /* =========================================================
-     DYNAMIC STYLES
-     ========================================================= */
-
-  function injectStyles() {
-
-    if ($("knowviaDynamicStyles")) {
-      return;
-    }
-
-    const style =
-      document.createElement("style");
-
-    style.id =
-      "knowviaDynamicStyles";
-
-    style.textContent = `
-
-      .kv-tools {
-        margin: 20px 0;
-        display: grid;
-        gap: 14px;
-      }
-
-      .kv-source-row,
-      .kv-feature-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-      }
-
-      .kv-source-btn,
-      .kv-feature-btn {
-        border: 1px solid rgba(100,100,120,.22);
-        border-radius: 12px;
-        padding: 10px 14px;
-        background: var(--card-bg, #fff);
-        color: inherit;
-        cursor: pointer;
-        font-weight: 600;
-      }
-
-      .kv-source-btn.active,
-      .kv-feature-btn:hover {
-        transform: translateY(-1px);
-      }
-
-      .kv-upload-box {
-        display: none;
-        padding: 14px;
-        border: 1px dashed rgba(100,100,120,.35);
-        border-radius: 14px;
-      }
-
-      .kv-upload-box.show {
-        display: block;
-      }
-
-      .kv-upload-box input {
-        width: 100%;
-        margin-top: 8px;
-      }
-
-      .kv-status {
-        font-size: .92rem;
-        opacity: .75;
-      }
-
-      .kv-modal {
-        position: fixed;
-        inset: 0;
-        z-index: 9999;
-        background: rgba(0,0,0,.58);
-        display: none;
-        align-items: center;
-        justify-content: center;
-        padding: 20px;
-      }
-
-      .kv-modal.show {
-        display: flex;
-      }
-
-      .kv-modal-card {
-        width: min(850px, 95vw);
-        max-height: 88vh;
-        overflow: auto;
-        border-radius: 20px;
-        padding: 24px;
-        background: var(--card-bg, #fff);
-        color: inherit;
-        box-shadow: 0 20px 70px rgba(0,0,0,.25);
-      }
-
-      .kv-modal-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 15px;
-        margin-bottom: 18px;
-      }
-
-      .kv-close {
-        border: 0;
-        background: transparent;
-        font-size: 25px;
-        cursor: pointer;
-      }
-
-      .kv-loading {
-        padding: 30px 10px;
-        text-align: center;
-        font-weight: 600;
-      }
-
-      .kv-ai-response h2,
-      .kv-ai-response h3,
-      .kv-ai-response h4 {
-        margin-top: 20px;
-      }
-
-      .kv-ai-response li {
-        margin: 7px 0;
-      }
-
-      .kv-quiz-question {
-        padding: 18px;
-        margin: 14px 0;
-        border-radius: 15px;
-        border: 1px solid rgba(100,100,120,.18);
-      }
-
-      .kv-option {
-        display: block;
-        margin: 8px 0;
-        padding: 10px;
-        border-radius: 10px;
-        cursor: pointer;
-      }
-
-      .kv-option:hover {
-        background: rgba(127,127,127,.08);
-      }
-
-      .kv-quiz-submit {
-        border: 0;
-        border-radius: 12px;
-        padding: 11px 18px;
-        cursor: pointer;
-        font-weight: 700;
-      }
-
-      .kv-score {
-        padding: 18px;
-        border-radius: 15px;
-        margin-bottom: 16px;
-        border: 1px solid rgba(100,100,120,.18);
-      }
-
-      .kv-toast {
-        position: fixed;
-        right: 18px;
-        bottom: 18px;
-        z-index: 10001;
-        max-width: min(420px, 90vw);
-        padding: 13px 16px;
-        border-radius: 12px;
-        background: #222;
-        color: #fff;
-        box-shadow: 0 10px 35px rgba(0,0,0,.25);
-      }
-
-      .kv-toast.error {
-        background: #a92727;
-      }
-
-      .kv-toast.success {
-        background: #24733d;
-      }
-
-      .kv-file-name {
-        margin-top: 8px;
-        font-size: .9rem;
-        opacity: .8;
-      }
-
-      .kv-mini-btn {
-        margin-top: 10px;
-        padding: 9px 13px;
-        border-radius: 10px;
-        cursor: pointer;
-        border: 1px solid rgba(100,100,120,.25);
-        background: transparent;
-        color: inherit;
-      }
-
-    `;
-
-    document.head.appendChild(style);
-  }
-
-
-  /* =========================================================
-     SOURCE CONTROLS
-     ========================================================= */
-
-  function createSourceTools() {
-
-    if ($("kvTools")) {
-      return;
-    }
-
-    const anchor =
-      els.generateBtn?.closest(
-        ".input-section"
-      ) ||
-      els.generateBtn?.parentElement ||
-      els.summaryContent?.parentElement;
-
-    if (!anchor) {
-      return;
-    }
-
-    const tools =
-      document.createElement("div");
-
-    tools.id = "kvTools";
-    tools.className = "kv-tools";
-
-    tools.innerHTML = `
-
-      <div class="kv-source-row">
-
-        <button
-          type="button"
-          class="kv-source-btn active"
-          data-source="topic">
-          Topic
-        </button>
-
-        <button
-          type="button"
-          class="kv-source-btn"
-          data-source="notes">
-          Typed Notes
-        </button>
-
-        <button
-          type="button"
-          class="kv-source-btn"
-          data-source="image">
-          Handwritten Notes
-        </button>
-
-        <button
-          type="button"
-          class="kv-source-btn"
-          data-source="pdf">
-          PDF
-        </button>
-
-      </div>
-
-
-      <div
-        class="kv-upload-box"
-        id="kvNotesBox">
-
-        <strong>
-          Paste your notes
-        </strong>
-
-        <textarea
-          id="kvNotesInput"
-          rows="7"
-          placeholder="Paste your class notes here...">
-        </textarea>
-
-        <button
-          type="button"
-          class="kv-mini-btn"
-          id="kvUseNotes">
-          Use these notes
-        </button>
-
-      </div>
-
-
-      <div
-        class="kv-upload-box"
-        id="kvImageBox">
-
-        <strong>
-          Upload a handwritten-note image
-        </strong>
-
-        <input
-          id="kvImageInput"
-          type="file"
-          accept="image/*">
-
-        <div
-          class="kv-file-name"
-          id="kvImageName">
-        </div>
-
-      </div>
-
-
-      <div
-        class="kv-upload-box"
-        id="kvPdfBox">
-
-        <strong>
-          Upload a PDF
-        </strong>
-
-        <input
-          id="kvPdfInput"
-          type="file"
-          accept="application/pdf,.pdf">
-
-        <div
-          class="kv-file-name"
-          id="kvPdfName">
-        </div>
-
-      </div>
-
-
-      <div
-        class="kv-status"
-        id="kvSourceStatus">
-
-        Enter a topic and choose a difficulty,
-        then click Generate Study Pack.
-
-      </div>
-
-    `;
-
-    anchor.insertAdjacentElement(
-      "afterend",
-      tools
-    );
-
-
-    document
-      .querySelectorAll(
-        ".kv-source-btn"
-      )
-      .forEach(btn => {
-
-        btn.addEventListener(
-          "click",
-          () => {
-            setSource(
-              btn.dataset.source
-            );
-          }
-        );
-
-      });
-
-
-    $("kvUseNotes")
-      ?.addEventListener(
+      tab.addEventListener(
         "click",
         () => {
 
-          state.material =
-            $("kvNotesInput")
-              ?.value
-              .trim() || "";
+          const source =
+            tab.dataset.source;
 
-          if (!state.material) {
+          setSource(source);
 
-            toast(
-              "Please paste some notes first.",
-              "error"
-            );
+        }
+      );
 
-            return;
+    });
+
+
+    $("notesInput")
+      ?.addEventListener(
+        "input",
+        () => {
+
+          if (
+            state.source === "notes"
+          ) {
+
+            state.material =
+              $("notesInput")
+                .value
+                .trim();
           }
 
-          $("kvSourceStatus")
-            .textContent =
-            `Typed notes ready: ${
-              state.material.length.toLocaleString()
-            } characters.`;
-
-          toast(
-            "Notes added.",
-            "success"
-          );
         }
       );
 
 
-    $("kvImageInput")
+    $("imageInput")
       ?.addEventListener(
         "change",
         handleImageUpload
       );
 
 
-    $("kvPdfInput")
+    $("pdfInput")
       ?.addEventListener(
         "change",
         handlePDFUpload
       );
+
+
+    setSource("topic");
   }
 
 
   function setSource(source) {
 
-    state.source = source;
+    state.source =
+      source;
+
 
     document
       .querySelectorAll(
-        ".kv-source-btn"
+        ".source-tab"
       )
-      .forEach(btn => {
+      .forEach(tab => {
 
-        btn.classList.toggle(
+        tab.classList.toggle(
           "active",
-          btn.dataset.source === source
+          tab.dataset.source === source
         );
 
       });
 
 
-    $("kvNotesBox")
-      ?.classList.toggle(
-        "show",
-        source === "notes"
-      );
+    document
+      .querySelectorAll(
+        ".source-panel"
+      )
+      .forEach(panel => {
+
+        panel.classList.remove(
+          "active"
+        );
+
+      });
 
 
-    $("kvImageBox")
-      ?.classList.toggle(
-        "show",
-        source === "image"
-      );
+    const panel =
+      $(`${source}Panel`);
 
-
-    $("kvPdfBox")
-      ?.classList.toggle(
-        "show",
-        source === "pdf"
-      );
-
-
-    const status =
-      $("kvSourceStatus");
+    panel
+      ?.classList
+      .add("active");
 
 
     if (source === "topic") {
 
-      if (status) {
-        status.textContent =
-          "Topic mode: AI builds the study material from the topic itself.";
-      }
-
-    } else if (source === "notes") {
-
-      if (status) {
-        status.textContent =
-          "Notes mode: AI will stay grounded in the notes you provide.";
-      }
-
-    } else if (source === "image") {
-
-      if (status) {
-        status.textContent =
-          "Handwritten mode: Knowvia will OCR the image before studying it.";
-      }
-
-    } else {
-
-      if (status) {
-        status.textContent =
-          "PDF mode: Knowvia will extract the PDF text before studying it.";
-      }
+      state.material = "";
 
     }
+
+
+    updateSourceStatus();
   }
 
 
-  /* =========================================================
-     LOAD EXTERNAL LIBRARIES
-     ========================================================= */
+  function updateSourceStatus() {
 
-  async function loadScript(
-    src,
-    test
-  ) {
-
-    if (test()) {
+    if (!els.statusMessage) {
       return;
     }
 
-    await new Promise(
-      (resolve, reject) => {
 
-        const script =
-          document.createElement(
-            "script"
-          );
+    const messages = {
 
-        script.src = src;
+      topic:
+        "Enter a topic and choose a difficulty.",
 
-        script.onload =
-          resolve;
+      notes:
+        "Paste your notes below. Knowvia will build the study pack from them.",
 
-        script.onerror =
-          () => reject(
-            new Error(
-              `Could not load ${src}`
-            )
-          );
+      image:
+        "Upload handwritten notes. Knowvia will extract the readable text automatically.",
 
-        document.head.appendChild(
-          script
-        );
-      }
-    );
+      pdf:
+        "Upload a text-based PDF. Knowvia will extract its text before studying it."
+
+    };
+
+
+    els.statusMessage.textContent =
+      messages[state.source] ||
+      "";
   }
 
 
   /* =========================================================
-     HANDWRITTEN IMAGE OCR
+     IMAGE OCR
      ========================================================= */
 
-  async function handleImageUpload(
-    event
-  ) {
+  async function handleImageUpload(event) {
 
     const file =
       event.target.files?.[0];
 
-    if (!file) {
-      return;
+    if (!file) return;
+
+
+    const preview =
+      $("imagePreview");
+
+    if (preview) {
+
+      preview.classList.remove(
+        "hidden"
+      );
+
+      preview.innerHTML = `
+        <span class="kv-file-loading">
+          ✦ Reading ${escapeHTML(file.name)}...
+        </span>
+      `;
     }
 
-    $("kvImageName")
-      .textContent =
-      `Reading: ${file.name}...`;
 
     try {
 
-      await loadScript(
-        "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js",
-        () => !!window.Tesseract
-      );
+      if (!window.Tesseract) {
+
+        await loadScript(
+          "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js",
+          () => !!window.Tesseract
+        );
+      }
 
 
       const result =
@@ -931,33 +609,45 @@
 
 
       if (!state.material) {
+
         throw new Error(
-          "No readable text was found in the image."
+          "No readable text was found in this image."
         );
       }
 
 
-      $("kvImageName")
-        .textContent =
-        `${file.name} — OCR complete (${
-          state.material.length.toLocaleString()
-        } characters)`;
+      if (preview) {
+
+        preview.innerHTML = `
+          <strong>✓ ${escapeHTML(file.name)}</strong>
+          <span>
+            OCR complete —
+            ${state.material.length.toLocaleString()}
+            characters extracted
+          </span>
+        `;
+      }
 
 
-      $("kvSourceStatus")
-        .textContent =
-        "Handwritten notes are ready. Click Generate Study Pack.";
-
+      els.statusMessage.textContent =
+        "Handwritten notes ready. Click Generate Study Pack.";
 
       toast(
-        "Handwritten notes extracted.",
+        "Handwritten notes extracted successfully.",
         "success"
       );
 
     } catch (error) {
 
-      $("kvImageName")
-        .textContent = "";
+      if (preview) {
+
+        preview.innerHTML = `
+          <span>
+            Could not read this image.
+          </span>
+        `;
+      }
+
 
       toast(
         error.message ||
@@ -969,30 +659,43 @@
 
 
   /* =========================================================
-     PDF EXTRACTION
+     PDF
      ========================================================= */
 
-  async function handlePDFUpload(
-    event
-  ) {
+  async function handlePDFUpload(event) {
 
     const file =
       event.target.files?.[0];
 
-    if (!file) {
-      return;
+    if (!file) return;
+
+
+    const info =
+      $("pdfInfo");
+
+    if (info) {
+
+      info.classList.remove(
+        "hidden"
+      );
+
+      info.innerHTML = `
+        <span class="kv-file-loading">
+          ✦ Extracting ${escapeHTML(file.name)}...
+        </span>
+      `;
     }
 
-    $("kvPdfName")
-      .textContent =
-      `Reading: ${file.name}...`;
 
     try {
 
-      await loadScript(
-        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
-        () => !!window.pdfjsLib
-      );
+      if (!window.pdfjsLib) {
+
+        await loadScript(
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",
+          () => !!window.pdfjsLib
+        );
+      }
 
 
       window.pdfjsLib
@@ -1035,7 +738,8 @@
         const pageText =
           content.items
             .map(
-              item => item.str
+              item =>
+                item.str
             )
             .join(" ");
 
@@ -1052,23 +756,26 @@
       if (!state.material) {
 
         throw new Error(
-          "This PDF did not contain selectable text. Try a clearer PDF or use the handwritten image option."
+          "This PDF does not contain selectable text."
         );
-
       }
 
 
-      $("kvPdfName")
-        .textContent =
-        `${file.name} — extracted ${
-          state.material.length.toLocaleString()
-        } characters`;
+      if (info) {
+
+        info.innerHTML = `
+          <strong>✓ ${escapeHTML(file.name)}</strong>
+          <span>
+            ${pdf.numPages} pages —
+            ${state.material.length.toLocaleString()}
+            characters extracted
+          </span>
+        `;
+      }
 
 
-      $("kvSourceStatus")
-        .textContent =
-        "PDF text is ready. Click Generate Study Pack.";
-
+      els.statusMessage.textContent =
+        "PDF ready. Click Generate Study Pack.";
 
       toast(
         "PDF extracted successfully.",
@@ -1077,8 +784,13 @@
 
     } catch (error) {
 
-      $("kvPdfName")
-        .textContent = "";
+      if (info) {
+
+        info.innerHTML = `
+          <span>Could not extract this PDF.</span>
+        `;
+      }
+
 
       toast(
         error.message ||
@@ -1089,150 +801,100 @@
   }
 
 
-  /* =========================================================
-     FEATURE BAR
-     ========================================================= */
+  async function loadScript(src, test) {
 
-  function createFeatureBar() {
-
-    if ($("kvFeatureBar")) {
+    if (test()) {
       return;
     }
 
-    const bar =
-      document.createElement(
-        "div"
-      );
 
-    bar.id =
-      "kvFeatureBar";
+    await new Promise(
+      (resolve, reject) => {
 
-    bar.className =
-      "kv-tools";
+        const script =
+          document.createElement(
+            "script"
+          );
 
+        script.src =
+          src;
 
-    bar.innerHTML = `
+        script.onload =
+          resolve;
 
-      <div>
+        script.onerror =
+          () =>
+            reject(
+              new Error(
+                "Could not load required library."
+              )
+            );
 
-        <h3>
-          Knowvia AI Tools
-        </h3>
-
-        <div class="kv-feature-row">
-
-          <button
-            type="button"
-            class="kv-feature-btn"
-            id="teachBtn">
-            Teach Me
-          </button>
-
-          <button
-            type="button"
-            class="kv-feature-btn"
-            id="studySessionBtn">
-            Study Session
-          </button>
-
-          <button
-            type="button"
-            class="kv-feature-btn"
-            id="examModeBtn">
-            Exam Mode
-          </button>
-
-          <button
-            type="button"
-            class="kv-feature-btn"
-            id="askNotesBtn">
-            Ask My Notes
-          </button>
-
-          <button
-            type="button"
-            class="kv-feature-btn"
-            id="weakTopicsBtn">
-            Weak Topic Detector
-          </button>
-
-          <button
-            type="button"
-            class="kv-feature-btn"
-            id="explainMistakeBtn">
-            Explain My Mistake
-          </button>
-
-        </div>
-
-      </div>
-
-    `;
+        document.head.appendChild(
+          script
+        );
+      }
+    );
+  }
 
 
-    const summarySection =
-      els.summaryContent
-        ?.closest("section") ||
-      els.summaryContent
-        ?.parentElement;
+  /* =========================================================
+     MATERIAL
+     ========================================================= */
 
+  function getMaterial() {
 
-    if (summarySection) {
+    if (state.source === "notes") {
 
-      summarySection.insertAdjacentElement(
-        "afterend",
-        bar
-      );
-
-    } else {
-
-      document.body.appendChild(
-        bar
-      );
-
+      state.material =
+        $("notesInput")
+          ?.value
+          .trim() || "";
     }
 
 
-    $("teachBtn")
-      ?.addEventListener(
-        "click",
-        teachMe
+    return state.material;
+  }
+
+
+  function ensureInput() {
+
+    const topic =
+      getTopic();
+
+    const material =
+      getMaterial();
+
+
+    if (
+      state.source === "topic" &&
+      !topic
+    ) {
+
+      throw new Error(
+        "Please enter a topic first."
       );
+    }
 
 
-    $("studySessionBtn")
-      ?.addEventListener(
-        "click",
-        studySession
+    if (
+      state.source !== "topic" &&
+      !material
+    ) {
+
+      throw new Error(
+        "Please provide your study material first."
       );
+    }
 
 
-    $("examModeBtn")
-      ?.addEventListener(
-        "click",
-        examMode
-      );
+    return {
+      topic:
+        topic ||
+        "Uploaded Study Material",
 
-
-    $("askNotesBtn")
-      ?.addEventListener(
-        "click",
-        askMyNotes
-      );
-
-
-    $("weakTopicsBtn")
-      ?.addEventListener(
-        "click",
-        weakTopicDetector
-      );
-
-
-    $("explainMistakeBtn")
-      ?.addEventListener(
-        "click",
-        explainMistake
-      );
+      material
+    };
   }
 
 
@@ -1246,12 +908,14 @@
       return;
     }
 
-    let topic;
+
+    let input;
+
 
     try {
 
-      topic =
-        ensureTopic();
+      input =
+        ensureInput();
 
     } catch (error) {
 
@@ -1264,18 +928,14 @@
     }
 
 
-    const difficulty =
-      getDifficulty();
-
-    const material =
-      ensureMaterial();
-
-
     state.title =
-      topic;
+      input.topic;
 
     state.difficulty =
-      difficulty;
+      getDifficulty();
+
+    state.quizStyle =
+      getQuizStyle();
 
     state.busy =
       true;
@@ -1284,106 +944,95 @@
     setBusy(
       els.generateBtn,
       true,
-      "Generating..."
+      "Creating your study pack..."
     );
 
 
-    if (els.summaryContent) {
-
-      els.summaryContent.innerHTML = `
-
-        <div class="kv-loading">
-
-          Knowvia is building a
-          ${escapeHTML(
-            difficultyLabel(
-              difficulty
-            )
-          )}
-          study pack for
-
-          <strong>
-            ${escapeHTML(topic)}
-          </strong>...
-
-        </div>
-
-      `;
-    }
+    showGenerationLoading();
 
 
     try {
 
       /*
-       * Generate summary, flashcards and quiz
-       * independently but at the same time.
+       * IMPORTANT:
+       *
+       * One API request now creates:
+       * Summary + Flashcards + Quiz
+       *
+       * This is faster than making
+       * three separate AI requests.
        */
 
-      const [
-        summaryResult,
-        flashcardResult,
-        quizResult
-      ] =
-        await Promise.all([
+      const result =
+        await callKnowviaAI({
 
-          callKnowviaAI({
-            task: "summary",
-            topic,
-            difficulty,
-            material
-          }),
+          task:
+            "study_pack",
 
-          callKnowviaAI({
-            task: "flashcards",
-            topic,
-            difficulty,
-            material
-          }),
+          topic:
+            input.topic,
 
-          callKnowviaAI({
-            task: "quiz",
-            topic,
-            difficulty,
-            material
-          })
+          difficulty:
+            state.difficulty,
 
-        ]);
+          material:
+            input.material,
+
+          quizStyle:
+            state.quizStyle
+        });
+
+
+      const pack =
+        parseJSON(
+          result.answer
+        );
 
 
       /* SUMMARY */
+
+      const summary =
+        pack.summary ||
+        "";
+
 
       if (els.summaryContent) {
 
         els.summaryContent.innerHTML =
           formatMarkdown(
-            summaryResult.answer
+            summary
           );
+      }
 
+
+      if (els.summaryTitle) {
+
+        els.summaryTitle.textContent =
+          `${input.topic} — ${difficultyLabel()}`;
+      }
+
+
+      if (els.sourcePill) {
+
+        els.sourcePill.textContent =
+          sourceLabel();
       }
 
 
       /* FLASHCARDS */
 
-      const flashData =
-        parseJSON(
-          flashcardResult.answer
-        );
-
-
       state.flashcards =
         Array.isArray(
-          flashData
+          pack.flashcards
         )
-          ? flashData
-          : (
-              flashData.flashcards ||
-              []
-            );
+          ? pack.flashcards
+          : [];
 
 
       state.flashcards =
         state.flashcards
           .map(card => ({
+
             question:
               card.question ||
               card.front ||
@@ -1397,6 +1046,7 @@
             hint:
               card.hint ||
               ""
+
           }))
           .filter(
             card =>
@@ -1405,52 +1055,57 @@
           );
 
 
-      state.cardIndex = 0;
+      state.cardIndex =
+        0;
+
 
       renderFlashcard();
 
 
       /* QUIZ */
 
-      const quizData =
-        parseJSON(
-          quizResult.answer
-        );
-
-
       state.quiz =
         Array.isArray(
-          quizData
+          pack.quiz
         )
-          ? quizData
-          : (
-              quizData.questions ||
-              []
-            );
+          ? pack.quiz
+          : [];
 
 
-      state.quizAnswers = [];
-      state.lastMistake = null;
+      state.quizAnswers =
+        [];
+
+      state.lastMistake =
+        null;
 
 
       renderQuiz();
 
 
-      els.summaryContent
+      updateStudyDNA();
+
+
+      createStudyNavigation();
+
+
+      toast(
+        "Your Knowvia study pack is ready ✨",
+        "success"
+      );
+
+
+      /*
+       * Move smoothly to Summary.
+       */
+
+      document
+        .getElementById(
+          "summary"
+        )
         ?.scrollIntoView({
           behavior: "smooth",
           block: "start"
         });
-
-
-      toast(
-        `Study pack ready: ${
-          difficultyLabel(
-            difficulty
-          )
-        } level.`,
-        "success"
-      );
 
 
     } catch (error) {
@@ -1459,7 +1114,11 @@
 
         els.summaryContent.innerHTML = `
 
-          <div class="kv-ai-response">
+          <div class="kv-error">
+
+            <div class="kv-error-icon">
+              !
+            </div>
 
             <h3>
               Something went wrong
@@ -1469,12 +1128,6 @@
               ${escapeHTML(
                 error.message
               )}
-            </p>
-
-            <p>
-              Check that your Vercel API
-              function and OPENAI_API_KEY
-              are configured correctly.
             </p>
 
           </div>
@@ -1490,12 +1143,317 @@
 
     } finally {
 
-      state.busy = false;
+      state.busy =
+        false;
+
 
       setBusy(
         els.generateBtn,
         false
       );
+
+    }
+  }
+
+
+  function showGenerationLoading() {
+
+    if (!els.summaryContent) {
+      return;
+    }
+
+
+    els.summaryContent.innerHTML = `
+
+      <div class="kv-generation">
+
+        <div class="kv-ai-orb">
+          ✦
+        </div>
+
+        <h3>
+          Knowvia is thinking...
+        </h3>
+
+        <p>
+          Creating your personalized
+          ${escapeHTML(
+            difficultyLabel()
+          )}
+          study pack
+        </p>
+
+        <div class="kv-loading-steps">
+
+          <span class="active">
+            <i></i>
+            Understanding
+          </span>
+
+          <span>
+            <i></i>
+            Building
+          </span>
+
+          <span>
+            <i></i>
+            Preparing practice
+          </span>
+
+        </div>
+
+      </div>
+
+    `;
+  }
+
+
+  /* =========================================================
+     STUDY NAVIGATION
+     ========================================================= */
+
+  function createStudyNavigation() {
+
+    if ($("kvStudyNavigation")) {
+      return;
+    }
+
+
+    const nav =
+      document.createElement(
+        "div"
+      );
+
+
+    nav.id =
+      "kvStudyNavigation";
+
+    nav.className =
+      "kv-study-navigation";
+
+
+    nav.innerHTML = `
+
+      <div class="kv-flow-label">
+        YOUR STUDY FLOW
+      </div>
+
+      <div class="kv-flow">
+
+        <button
+          type="button"
+          class="kv-flow-btn active"
+          data-target="summary">
+
+          <span>01</span>
+          Summary
+
+        </button>
+
+        <div class="kv-flow-line"></div>
+
+        <button
+          type="button"
+          class="kv-flow-btn"
+          data-target="flashcards">
+
+          <span>02</span>
+          Flashcards
+
+        </button>
+
+        <div class="kv-flow-line"></div>
+
+        <button
+          type="button"
+          class="kv-flow-btn"
+          data-target="quiz">
+
+          <span>03</span>
+          Quiz
+
+        </button>
+
+      </div>
+
+      <div class="kv-next-area">
+
+        <button
+          type="button"
+          class="kv-next-btn"
+          id="kvNextStep">
+
+          Next: Flashcards
+          <span>→</span>
+
+        </button>
+
+      </div>
+
+    `;
+
+
+    const summary =
+      document.getElementById(
+        "summary"
+      );
+
+
+    summary
+      ?.querySelector(
+        ".summary-card"
+      )
+      ?.insertAdjacentElement(
+        "afterend",
+        nav
+      );
+
+
+    nav
+      .querySelectorAll(
+        ".kv-flow-btn"
+      )
+      .forEach(btn => {
+
+        btn.addEventListener(
+          "click",
+          () => {
+
+            goToStep(
+              btn.dataset.target
+            );
+
+          }
+        );
+
+      });
+
+
+    $("kvNextStep")
+      ?.addEventListener(
+        "click",
+        nextStudyStep
+      );
+  }
+
+
+  function goToStep(target) {
+
+    document
+      .getElementById(target)
+      ?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+
+
+    document
+      .querySelectorAll(
+        ".kv-flow-btn"
+      )
+      .forEach(btn => {
+
+        btn.classList.toggle(
+          "active",
+          btn.dataset.target === target
+        );
+
+      });
+
+
+    updateNextButton(target);
+  }
+
+
+  function nextStudyStep() {
+
+    const sections = [
+      "summary",
+      "flashcards",
+      "quiz"
+    ];
+
+
+    const current =
+      sections.findIndex(
+        id => {
+
+          const element =
+            document.getElementById(id);
+
+          if (!element) {
+            return false;
+          }
+
+          const rect =
+            element.getBoundingClientRect();
+
+          return (
+            rect.top >= -100 &&
+            rect.top < 500
+          );
+        }
+      );
+
+
+    const index =
+      current === -1
+        ? 0
+        : current;
+
+
+    const next =
+      sections[
+        Math.min(
+          index + 1,
+          sections.length - 1
+        )
+      ];
+
+
+    goToStep(next);
+  }
+
+
+  function updateNextButton(target) {
+
+    const button =
+      $("kvNextStep");
+
+    if (!button) {
+      return;
+    }
+
+
+    const labels = {
+
+      summary:
+        "Next: Flashcards →",
+
+      flashcards:
+        "Next: Quiz →",
+
+      quiz:
+        "Back to Summary ↑"
+
+    };
+
+
+    button.innerHTML =
+      labels[target] ||
+      "Next →";
+
+
+    if (target === "quiz") {
+
+      button.onclick =
+        () =>
+          goToStep("summary");
+
+    } else {
+
+      button.onclick =
+        nextStudyStep;
 
     }
   }
@@ -1518,7 +1476,7 @@
     if (!state.flashcards.length) {
 
       els.cardQuestion.textContent =
-        "Generate a study pack first.";
+        "Generate a study pack to begin";
 
       els.cardAnswer.textContent =
         "Your AI flashcards will appear here.";
@@ -1527,7 +1485,6 @@
 
         els.cardProgress.textContent =
           "Card 0 / 0";
-
       }
 
       return;
@@ -1558,51 +1515,25 @@
         } / ${
           state.flashcards.length
         }`;
-
     }
 
 
-    /*
-     * Always return to front when moving
-     * to another card.
-     */
-
     els.flashcard
       ?.classList
-      .remove("flipped");
+      .remove(
+        "flipped"
+      );
   }
 
 
-  /*
-   * IMPORTANT FIX:
-   *
-   * The previous version had two click handlers
-   * attached to the flashcard.
-   *
-   * That could toggle the class twice.
-   *
-   * Now there is only one card click handler.
-   */
-
   function flipCard(event) {
 
-    if (event) {
-
-      const target =
-        event.target;
-
-      /*
-       * Do not flip twice when clicking
-       * a button inside the card.
-       */
-
-      if (
-        target?.closest?.(
-          "button"
-        )
-      ) {
-        return;
-      }
+    if (
+      event?.target?.closest?.(
+        "button"
+      )
+    ) {
+      return;
     }
 
 
@@ -1617,6 +1548,7 @@
   function nextCard(event) {
 
     event?.stopPropagation();
+
 
     if (!state.flashcards.length) {
       return;
@@ -1637,6 +1569,7 @@
   function previousCard(event) {
 
     event?.stopPropagation();
+
 
     if (!state.flashcards.length) {
       return;
@@ -1669,11 +1602,25 @@
 
     if (!state.quiz.length) {
 
-      els.quizContainer.innerHTML =
-        `<p>
-          Generate a study pack to create
-          an AI quiz.
-        </p>`;
+      els.quizContainer.innerHTML = `
+
+        <div class="quiz-empty">
+
+          <div class="quiz-icon">
+            🎯
+          </div>
+
+          <h3>
+            Your quiz is waiting
+          </h3>
+
+          <p>
+            Generate a study pack first.
+          </p>
+
+        </div>
+
+      `;
 
       return;
     }
@@ -1681,103 +1628,137 @@
 
     els.quizContainer.innerHTML = `
 
-      <div class="kv-score">
-
-        <strong>
-          ${escapeHTML(
-            difficultyLabel(
-              state.difficulty
-            )
-          )}
-          Quiz
-        </strong>
+      <div class="quiz-intro">
 
         <div>
-          ${
-            state.quiz.length
-          }
-          questions based on your
-          current material.
+
+          <span class="quiz-kicker">
+            ${escapeHTML(
+              difficultyLabel()
+            )}
+          </span>
+
+          <h3>
+            Ready to test yourself?
+          </h3>
+
+          <p>
+            ${state.quiz.length}
+            questions generated from
+            your study material.
+          </p>
+
+        </div>
+
+        <div class="quiz-count">
+          ${state.quiz.length}
+          <small>QUESTIONS</small>
         </div>
 
       </div>
 
 
-      ${state.quiz
-        .map(
-          (q, i) => {
+      <div class="quiz-questions">
 
-            const options =
-              Array.isArray(
-                q.options
-              )
-                ? q.options
-                : [];
+        ${state.quiz
+          .map(
+            (q, i) => {
 
-
-            return `
-
-              <div
-                class="kv-quiz-question"
-                data-question="${i}">
-
-                <h4>
-                  ${i + 1}.
-                  ${escapeHTML(
-                    q.question ||
-                    ""
-                  )}
-                </h4>
+              const options =
+                Array.isArray(
+                  q.options
+                )
+                  ? q.options
+                  : [];
 
 
-                ${options
-                  .map(
-                    (
-                      option,
-                      j
-                    ) => `
+              return `
 
-                      <label
-                        class="kv-option">
+                <div
+                  class="quiz-question"
+                  data-question="${i}">
 
-                        <input
-                          type="radio"
-                          name="kvq${i}"
-                          value="${j}">
+                  <div class="quiz-number">
+                    QUESTION ${String(
+                      i + 1
+                    ).padStart(
+                      2,
+                      "0"
+                    )}
+                  </div>
 
-                        ${escapeHTML(
-                          typeof option ===
-                          "string"
-                            ? option
-                            : (
-                                option.text ||
-                                option.label ||
-                                ""
-                              )
-                        )}
-
-                      </label>
-
-                    `
-                  )
-                  .join("")}
-
-              </div>
-
-            `;
-          }
-        )
-        .join("")}
+                  <h3>
+                    ${escapeHTML(
+                      q.question ||
+                      ""
+                    )}
+                  </h3>
 
 
-      <button
-        type="button"
-        class="kv-quiz-submit"
-        id="kvSubmitQuiz">
+                  <div class="options">
 
-        Check My Score
+                    ${options
+                      .map(
+                        (
+                          option,
+                          j
+                        ) => `
 
-      </button>
+                          <label
+                            class="option">
+
+                            <input
+                              type="radio"
+                              name="kvq${i}"
+                              value="${j}">
+
+                            <span>
+                              ${escapeHTML(
+                                typeof option ===
+                                "string"
+                                  ? option
+                                  : (
+                                      option.text ||
+                                      option.label ||
+                                      ""
+                                    )
+                              )}
+                            </span>
+
+                          </label>
+
+                        `
+                      )
+                      .join("")}
+
+                  </div>
+
+                </div>
+
+              `;
+            }
+          )
+          .join("")}
+
+      </div>
+
+
+      <div class="quiz-actions">
+
+        <span class="quiz-progress">
+          Choose your answers
+        </span>
+
+        <button
+          type="button"
+          class="generate-btn quiz-submit"
+          id="kvSubmitQuiz">
+
+          Check My Score →
+          
+        </button>
+
+      </div>
 
 
       <div
@@ -1836,15 +1817,9 @@
 
 
         const correctValue =
-          Number.isFinite(
-            Number(
-              q.correctAnswer
-            )
-          )
-            ? Number(
-                q.correctAnswer
-              )
-            : 0;
+          Number(
+            q.correctAnswer
+          );
 
 
         const correct =
@@ -1880,7 +1855,8 @@
                 index
               ) => ({
 
-                value: index,
+                value:
+                  index,
 
                 label:
                   getOptionText(
@@ -1898,6 +1874,25 @@
 
         });
 
+
+        const questionBox =
+          document.querySelector(
+            `[data-question="${i}"]`
+          );
+
+
+        if (
+          questionBox &&
+          value !== null
+        ) {
+
+          questionBox.classList.add(
+            correct
+              ? "answered-correct"
+              : "answered-wrong"
+          );
+        }
+
       }
     );
 
@@ -1906,30 +1901,21 @@
       answers;
 
 
-    const firstMistake =
+    state.lastMistake =
       answers.find(
         item =>
           !item.correct &&
           item.value !== null
-      );
-
-
-    state.lastMistake =
-      firstMistake ||
-      null;
+      ) || null;
 
 
     const percentage =
       state.quiz.length
-
         ? Math.round(
-            (
-              score /
-              state.quiz.length
-            ) *
+            score /
+            state.quiz.length *
             100
           )
-
         : 0;
 
 
@@ -1939,37 +1925,49 @@
 
     if (result) {
 
+      let message =
+        "Keep practicing.";
+
+      if (percentage >= 90) {
+        message =
+          "Outstanding! You really know this.";
+      } else if (percentage >= 80) {
+        message =
+          "Excellent understanding!";
+      } else if (percentage >= 60) {
+        message =
+          "Good progress. Review the missed concepts.";
+      }
+
+
       result.innerHTML = `
 
-        <div class="kv-score">
+        <div class="quiz-result">
 
-          <h3>
-            Score:
-            ${score}/${state.quiz.length}
-            (${percentage}%)
-          </h3>
+          <div class="result-score">
+            ${percentage}%
+          </div>
 
-          <p>
-            Answered:
-            ${answered}/${state.quiz.length}
-          </p>
+          <div>
 
-          <p>
+            <span>
+              ${score}/${state.quiz.length}
+              correct
+            </span>
 
-            ${
-              percentage >= 80
+            <h3>
+              ${message}
+            </h3>
 
-                ? "Excellent understanding."
+            <p>
+              Answered
+              ${answered}
+              of
+              ${state.quiz.length}
+              questions.
+            </p>
 
-                : percentage >= 60
-
-                  ? "Good start. Review the questions you missed."
-
-                  : "Review the topic and try the quiz again."
-
-            }
-
-          </p>
+          </div>
 
         </div>
 
@@ -1977,13 +1975,194 @@
     }
 
 
-    if (firstMistake) {
+    updateStudyDNA();
+
+
+    if (state.lastMistake) {
 
       toast(
-        "You have a mistake available for Explain My Mistake.",
+        "You have a mistake ready for Explain My Mistake 💡",
         "info"
       );
+    }
+  }
 
+
+  /* =========================================================
+     STUDY DNA
+     ========================================================= */
+
+  function updateStudyDNA() {
+
+    if (!state.quizAnswers.length) {
+      return;
+    }
+
+
+    const total =
+      state.quizAnswers.length;
+
+
+    const correct =
+      state.quizAnswers.filter(
+        a =>
+          a.correct
+      ).length;
+
+
+    const understanding =
+      Math.round(
+        correct /
+        total *
+        100
+      );
+
+
+    const answered =
+      state.quizAnswers.filter(
+        a =>
+          a.value !== null
+      ).length;
+
+
+    const recall =
+      Math.round(
+        answered /
+        total *
+        100
+      );
+
+
+    const application =
+      Math.max(
+        0,
+        Math.min(
+          100,
+          Math.round(
+            (
+              understanding *
+              0.7
+            ) +
+            (
+              recall *
+              0.3
+            )
+          )
+        )
+      );
+
+
+    if (els.understandingBar) {
+
+      els.understandingBar.style.width =
+        `${understanding}%`;
+    }
+
+
+    if (els.recallBar) {
+
+      els.recallBar.style.width =
+        `${recall}%`;
+    }
+
+
+    if (els.applicationBar) {
+
+      els.applicationBar.style.width =
+        `${application}%`;
+    }
+
+
+    if (els.dnaText) {
+
+      els.dnaText.textContent =
+        `You scored ${understanding}%. Your current learning profile shows ${recall}% answer recall and ${application}% overall application strength.`;
+    }
+
+
+    updateInsights();
+  }
+
+
+  function updateInsights() {
+
+    const wrong =
+      state.quizAnswers.filter(
+        a =>
+          !a.correct &&
+          a.value !== null
+      );
+
+
+    if (els.weakTopic) {
+
+      if (!wrong.length) {
+
+        els.weakTopic.textContent =
+          "No clear weak area yet. Excellent work!";
+
+      } else {
+
+        els.weakTopic.textContent =
+          `${wrong.length} question${
+            wrong.length === 1
+              ? ""
+              : "s"
+          } need another review. Use Explain My Mistake to understand the first one.`;
+      }
+    }
+
+
+    if (els.mistakeText) {
+
+      if (state.lastMistake) {
+
+        els.mistakeText.textContent =
+          `Your first missed question is ready for a detailed explanation and memory trick.`;
+
+      } else {
+
+        els.mistakeText.textContent =
+          "Complete the quiz to unlock mistake explanations.";
+      }
+    }
+
+
+    if (els.knowledgeMap) {
+
+      els.knowledgeMap.innerHTML =
+        "";
+
+      const correct =
+        state.quizAnswers.filter(
+          a => a.correct
+        ).length;
+
+
+      const total =
+        state.quizAnswers.length;
+
+
+      const node =
+        document.createElement(
+          "span"
+        );
+
+
+      node.className =
+        correct >= total * 0.8
+          ? "map-node strong"
+          : "map-node weak";
+
+
+      node.textContent =
+        correct >= total * 0.8
+          ? "Strong foundation"
+          : "Needs review";
+
+
+      els.knowledgeMap
+        .appendChild(node);
     }
   }
 
@@ -1992,134 +2171,77 @@
      MODAL
      ========================================================= */
 
-  function createModal() {
+  function openModal(title, content) {
 
-    if ($("kvModal")) {
+    if (!els.modal) {
       return;
     }
 
 
-    const modal =
-      document.createElement(
-        "div"
-      );
+    els.modalContent.innerHTML = `
 
+      <div class="modal-heading">
+        <span class="modal-kicker">
+          KNOWVIA AI
+        </span>
 
-    modal.id =
-      "kvModal";
-
-    modal.className =
-      "kv-modal";
-
-
-    modal.innerHTML = `
-
-      <div
-        class="kv-modal-card">
-
-        <div
-          class="kv-modal-head">
-
-          <h2
-            id="kvModalTitle">
-            Knowvia AI
-          </h2>
-
-          <button
-            type="button"
-            class="kv-close"
-            id="kvModalClose">
-
-            ×
-
-          </button>
-
-        </div>
-
-
-        <div
-          id="kvModalBody">
-        </div>
-
+        <h2>
+          ${escapeHTML(title)}
+        </h2>
       </div>
+
+      ${content}
 
     `;
 
 
-    document.body.appendChild(
-      modal
+    els.modal.classList.remove(
+      "hidden"
     );
 
-
-    $("kvModalClose")
-      ?.addEventListener(
-        "click",
-        closeModal
-      );
-
-
-    modal.addEventListener(
-      "click",
-      event => {
-
-        if (
-          event.target ===
-          modal
-        ) {
-          closeModal();
-        }
-
-      }
+    document.body.classList.add(
+      "modal-open"
     );
-  }
-
-
-  function openModal(
-    title,
-    body = ""
-  ) {
-
-    createModal();
-
-
-    $("kvModalTitle")
-      .textContent =
-      title;
-
-
-    $("kvModalBody")
-      .innerHTML =
-      body;
-
-
-    $("kvModal")
-      .classList
-      .add("show");
   }
 
 
   function closeModal() {
 
-    $("kvModal")
+    els.modal
       ?.classList
-      .remove("show");
+      .add("hidden");
+
+    document.body.classList.remove(
+      "modal-open"
+    );
   }
 
 
-  async function runModalTask(
+  async function runAIInModal(
     title,
     payload,
-    loading =
-      "Knowvia is thinking..."
+    loading
   ) {
 
     openModal(
       title,
       `
-        <div class="kv-loading">
-          ${escapeHTML(
-            loading
-          )}
+        <div class="kv-modal-loading">
+
+          <div class="kv-ai-orb">
+            ✦
+          </div>
+
+          <h3>
+            ${escapeHTML(loading)}
+          </h3>
+
+          <div class="kv-loading-dots">
+            <i></i>
+            <i></i>
+            <i></i>
+          </div>
+
         </div>
       `
     );
@@ -2133,22 +2255,45 @@
         );
 
 
-      $("kvModalBody")
-        .innerHTML =
-        formatMarkdown(
+      els.modalContent.innerHTML = `
+
+        <div class="modal-heading">
+
+          <span class="modal-kicker">
+            KNOWVIA AI
+          </span>
+
+          <h2>
+            ${escapeHTML(title)}
+          </h2>
+
+        </div>
+
+        ${formatMarkdown(
           result.answer
-        );
+        )}
+
+      `;
 
     } catch (error) {
 
-      $("kvModalBody")
-        .innerHTML =
-        `<p>
-          ${escapeHTML(
-            error.message
-          )}
-        </p>`;
+      els.modalContent.innerHTML = `
 
+        <div class="kv-error">
+
+          <h3>
+            Something went wrong
+          </h3>
+
+          <p>
+            ${escapeHTML(
+              error.message
+            )}
+          </p>
+
+        </div>
+
+      `;
     }
   }
 
@@ -2159,46 +2304,33 @@
 
   async function teachMe() {
 
-    let material;
+    const input =
+      ensureInputSafe();
 
-    try {
-
-      ensureTopic();
-
-      material =
-        ensureMaterial();
-
-    } catch (error) {
-
-      toast(
-        error.message,
-        "error"
-      );
-
-      return;
-    }
+    if (!input) return;
 
 
-    await runModalTask(
+    await runAIInModal(
 
       "Teach Me",
 
       {
 
-        task: "teach",
+        task:
+          "teach",
 
         topic:
-          getCurrentTitle(),
+          input.topic,
 
         difficulty:
           getDifficulty(),
 
-        material
+        material:
+          input.material
 
       },
 
-      "AI teacher is preparing a step-by-step lesson..."
-
+      "Your personal AI teacher is preparing a lesson..."
     );
   }
 
@@ -2209,27 +2341,13 @@
 
   async function studySession() {
 
-    let material;
+    const input =
+      ensureInputSafe();
 
-    try {
-
-      ensureTopic();
-
-      material =
-        ensureMaterial();
-
-    } catch (error) {
-
-      toast(
-        error.message,
-        "error"
-      );
-
-      return;
-    }
+    if (!input) return;
 
 
-    await runModalTask(
+    await runAIInModal(
 
       "Study Session",
 
@@ -2239,17 +2357,17 @@
           "study_session",
 
         topic:
-          getCurrentTitle(),
+          input.topic,
 
         difficulty:
           getDifficulty(),
 
-        material
+        material:
+          input.material
 
       },
 
-      "Building a focused study session..."
-
+      "Building your focused study session..."
     );
   }
 
@@ -2260,46 +2378,33 @@
 
   async function examMode() {
 
-    let material;
+    const input =
+      ensureInputSafe();
 
-    try {
-
-      ensureTopic();
-
-      material =
-        ensureMaterial();
-
-    } catch (error) {
-
-      toast(
-        error.message,
-        "error"
-      );
-
-      return;
-    }
+    if (!input) return;
 
 
-    await runModalTask(
+    await runAIInModal(
 
       "Exam Mode",
 
       {
 
-        task: "exam",
+        task:
+          "exam",
 
         topic:
-          getCurrentTitle(),
+          input.topic,
 
         difficulty:
           getDifficulty(),
 
-        material
+        material:
+          input.material
 
       },
 
-      "Generating exam-oriented questions and answers..."
-
+      "Preparing exam-oriented questions..."
     );
   }
 
@@ -2308,26 +2413,12 @@
      ASK MY NOTES
      ========================================================= */
 
-  async function askMyNotes() {
+  function askMyNotes() {
 
-    let material;
+    const input =
+      ensureInputSafe();
 
-    try {
-
-      ensureTopic();
-
-      material =
-        ensureMaterial();
-
-    } catch (error) {
-
-      toast(
-        error.message,
-        "error"
-      );
-
-      return;
-    }
+    if (!input) return;
 
 
     openModal(
@@ -2336,30 +2427,25 @@
 
       `
 
-        <p>
-          Ask a question.
-          Knowvia will answer using
-          your current topic/notes.
+        <p class="modal-description">
+          Ask anything about your current
+          topic or study material.
         </p>
-
 
         <textarea
           id="kvAskInput"
           rows="5"
-          style="width:100%;"
-          placeholder="Example: Explain the difference between supervised and unsupervised learning.">
+          placeholder="Example: Explain this concept in simple words...">
         </textarea>
-
 
         <button
           type="button"
-          class="kv-mini-btn"
+          class="generate-btn"
           id="kvAskSubmit">
 
-          Ask Knowvia
+          Ask Knowvia →
 
         </button>
-
 
         <div
           id="kvAskResult">
@@ -2391,16 +2477,21 @@
           }
 
 
-          const resultBox =
-            $("kvAskResult");
+          $("kvAskResult").innerHTML = `
 
+            <div class="kv-modal-loading small">
 
-          resultBox.innerHTML =
-            `
-              <div class="kv-loading">
-                Searching your study material...
+              <div class="kv-loading-dots">
+                <i></i>
+                <i></i>
+                <i></i>
               </div>
-            `;
+
+              Knowvia is thinking...
+
+            </div>
+
+          `;
 
 
           try {
@@ -2412,32 +2503,32 @@
                   "ask_notes",
 
                 topic:
-                  getCurrentTitle(),
+                  input.topic,
 
                 difficulty:
                   getDifficulty(),
 
-                material,
+                material:
+                  input.material,
 
                 question
 
               });
 
 
-            resultBox.innerHTML =
+            $("kvAskResult").innerHTML =
               formatMarkdown(
                 result.answer
               );
 
           } catch (error) {
 
-            resultBox.innerHTML =
+            $("kvAskResult").innerHTML =
               `<p>
                 ${escapeHTML(
                   error.message
                 )}
               </p>`;
-
           }
 
         }
@@ -2445,18 +2536,11 @@
   }
 
 
-  /* =========================================================
-     WEAK TOPIC DETECTOR
-     ========================================================= */
-
-  async function weakTopicDetector() {
-
-    let material;
+  function ensureInputSafe() {
 
     try {
 
-      material =
-        ensureMaterial();
+      return ensureInput();
 
     } catch (error) {
 
@@ -2465,121 +2549,8 @@
         "error"
       );
 
-      return;
+      return null;
     }
-
-
-    openModal(
-
-      "Weak Topic Detector",
-
-      `
-
-        <p>
-          Enter your quiz score or paste
-          your recent performance.
-        </p>
-
-
-        <textarea
-          id="kvWeakInput"
-          rows="6"
-          style="width:100%;"
-          placeholder="Example: Computer Networks 4/10, OS 8/10, DBMS 5/10">
-        </textarea>
-
-
-        <button
-          type="button"
-          class="kv-mini-btn"
-          id="kvWeakSubmit">
-
-          Detect Weak Topics
-
-        </button>
-
-
-        <div
-          id="kvWeakResult">
-        </div>
-
-      `
-    );
-
-
-    $("kvWeakSubmit")
-      ?.addEventListener(
-        "click",
-        async () => {
-
-          const quizResult =
-            $("kvWeakInput")
-              ?.value
-              .trim();
-
-
-          if (!quizResult) {
-
-            toast(
-              "Please enter some performance data.",
-              "error"
-            );
-
-            return;
-          }
-
-
-          const resultBox =
-            $("kvWeakResult");
-
-
-          resultBox.innerHTML =
-            `
-              <div class="kv-loading">
-                Analyzing your weak areas...
-              </div>
-            `;
-
-
-          try {
-
-            const result =
-              await callKnowviaAI({
-
-                task:
-                  "weak_topics",
-
-                topic:
-                  getCurrentTitle(),
-
-                difficulty:
-                  getDifficulty(),
-
-                material,
-
-                quizResult
-
-              });
-
-
-            resultBox.innerHTML =
-              formatMarkdown(
-                result.answer
-              );
-
-          } catch (error) {
-
-            resultBox.innerHTML =
-              `<p>
-                ${escapeHTML(
-                  error.message
-                )}
-              </p>`;
-
-          }
-
-        }
-      );
   }
 
 
@@ -2590,12 +2561,7 @@
   async function explainMistake() {
 
     const mistake =
-      state.lastMistake ||
-      state.quizAnswers.find(
-        item =>
-          item &&
-          !item.correct
-      );
+      state.lastMistake;
 
 
     if (!mistake) {
@@ -2611,12 +2577,10 @@
 
     const selected =
       mistake.value !== null
-
         ? mistake
             .options[
               mistake.value
             ]?.label
-
         : "Not answered";
 
 
@@ -2627,7 +2591,7 @@
         ]?.label;
 
 
-    await runModalTask(
+    await runAIInModal(
 
       "Explain My Mistake",
 
@@ -2637,13 +2601,13 @@
           "explain_mistake",
 
         topic:
-          getCurrentTitle(),
+          getTopic(),
 
         difficulty:
           getDifficulty(),
 
         material:
-          ensureMaterial(),
+          getMaterial(),
 
         question:
           mistake.question,
@@ -2656,50 +2620,102 @@
 
       },
 
-      "AI is analyzing why the answer was wrong..."
-
+      "Analyzing your mistake and finding the easiest way to remember it..."
     );
   }
 
 
   /* =========================================================
-     DARK MODE
+     FEATURE BUTTON CONNECTIONS
+     IMPORTANT:
+     These use the buttons already in index.html.
+     ========================================================= */
+
+  function setupFeatureButtons() {
+
+    els.teachBtn
+      ?.addEventListener(
+        "click",
+        teachMe
+      );
+
+
+    els.sessionBtn
+      ?.addEventListener(
+        "click",
+        studySession
+      );
+
+
+    els.examBtn
+      ?.addEventListener(
+        "click",
+        examMode
+      );
+
+
+    els.notesAskBtn
+      ?.addEventListener(
+        "click",
+        askMyNotes
+      );
+
+
+    /*
+     * Clicking the Study DNA
+     * "Targeted Re-test" button
+     * takes the learner back to Quiz.
+     */
+
+    els.retryWeakBtn
+      ?.addEventListener(
+        "click",
+        () => {
+
+          goToStep("quiz");
+
+          toast(
+            "Review your weak questions and try again.",
+            "info"
+          );
+
+        }
+      );
+  }
+
+
+  /* =========================================================
+     THEME
      ========================================================= */
 
   function setupTheme() {
 
-    if (!els.themeBtn) {
-      return;
-    }
+    els.themeBtn
+      ?.addEventListener(
+        "click",
+        () => {
 
-
-    els.themeBtn.addEventListener(
-      "click",
-      () => {
-
-        const isDark =
-          document.body
-            .classList
-            .toggle(
-              "dark-mode"
+          const dark =
+            document.body.classList.toggle(
+              "dark"
             );
 
 
-        document.body
-          .classList
-          .toggle(
-            "dark",
-            isDark
+          els.themeBtn.textContent =
+            dark
+              ? "☀"
+              : "☾";
+
+
+          els.themeBtn.setAttribute(
+            "aria-label",
+            dark
+              ? "Switch to light mode"
+              : "Switch to dark mode"
           );
 
-
-        els.themeBtn.textContent =
-          isDark
-            ? "☀"
-            : "◐";
-
-      }
-    );
+        }
+      );
   }
 
 
@@ -2717,11 +2733,7 @@
 
 
     /*
-     * ONLY ONE click handler
-     * for the flashcard.
-     *
-     * This fixes the previous
-     * flip problem.
+     * One flashcard click handler only.
      */
 
     els.flashcard
@@ -2731,11 +2743,6 @@
       );
 
 
-    /*
-     * Flip button has its own
-     * handler and stops propagation.
-     */
-
     els.flipCard
       ?.addEventListener(
         "click",
@@ -2743,7 +2750,11 @@
 
           event.stopPropagation();
 
-          flipCard();
+          els.flashcard
+            ?.classList
+            .toggle(
+              "flipped"
+            );
 
         }
       );
@@ -2763,6 +2774,50 @@
       );
 
 
+    els.modalClose
+      ?.addEventListener(
+        "click",
+        closeModal
+      );
+
+
+    els.modal
+      ?.addEventListener(
+        "click",
+        event => {
+
+          if (
+            event.target ===
+            els.modal
+          ) {
+
+            closeModal();
+          }
+
+        }
+      );
+
+
+    document.addEventListener(
+      "keydown",
+      event => {
+
+        if (
+          event.key ===
+          "Escape"
+        ) {
+
+          closeModal();
+        }
+
+      }
+    );
+
+
+    setupSourceTabs();
+
+    setupFeatureButtons();
+
     setupTheme();
   }
 
@@ -2773,20 +2828,12 @@
 
   function init() {
 
-    injectStyles();
-
-    createSourceTools();
-
-    createFeatureBar();
-
-    createModal();
-
     setupEvents();
 
     renderFlashcard();
 
     console.log(
-      "Knowvia AI frontend initialized."
+      "Knowvia polished AI frontend initialized."
     );
   }
 
@@ -2804,7 +2851,6 @@
   } else {
 
     init();
-
   }
 
 })();
