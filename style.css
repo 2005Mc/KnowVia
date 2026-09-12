@@ -1161,3 +1161,58 @@ body.dark .formatted-bullet,
 body.dark .formatted-number {
   color: inherit;
 }
+/* =========================================================
+   KNOWVIA - FIX BULLET / NUMBER LINE BREAKING
+========================================================= */
+
+.formatted-content {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.formatted-bullet,
+.formatted-number {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  margin: 8px 0;
+  line-height: 1.7;
+  white-space: normal;
+}
+
+.bullet-symbol,
+.number-symbol {
+  flex: 0 0 auto;
+  margin-right: 8px;
+}
+
+.bullet-text,
+.number-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* Dark mode */
+body.dark .formatted-content,
+body.dark .formatted-bullet,
+body.dark .formatted-number,
+body.dark .bullet-text,
+body.dark .number-text {
+  color: inherit;
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .formatted-bullet,
+  .formatted-number {
+    align-items: flex-start;
+  }
+
+  .bullet-symbol,
+  .number-symbol {
+    margin-right: 6px;
+  }
+}
