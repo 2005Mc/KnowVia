@@ -1,4 +1,4 @@
-const MODEL = "gemini-3.7-flash";
+const MODEL = "gemini-3.5-flash-lite";
 
 const ALLOWED_TASKS = new Set([
   "study_pack",
