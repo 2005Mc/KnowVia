@@ -467,7 +467,30 @@ select {
 ========================= */
 
 .summary-text {
-  white-space: pre-wrap;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.summary-text strong {
+  font-weight: 800;
+}
+
+.study-heading {
+  display: block;
+
+  margin: 26px 0 10px;
+
+  font-size: 20px;
+  font-weight: 800;
+
+  line-height: 1.4;
+
+  color: #172033;
+}
+
+.study-heading:first-child {
+  margin-top: 0;
 }
 
 
@@ -640,6 +663,7 @@ select {
   line-height: 1.45;
 
   overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .quiz-options {
@@ -670,6 +694,7 @@ select {
   line-height: 1.5;
 
   overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .quiz-option input {
@@ -681,6 +706,12 @@ select {
   margin-top: 3px;
 
   accent-color: #2563eb;
+}
+
+.quiz-option span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .quiz-option:hover {
@@ -951,7 +982,9 @@ body.dark .source-tab.active {
 }
 
 
-/* DARK INPUTS */
+/* =========================
+   DARK INPUTS
+========================= */
 
 body.dark .input-wrap {
   background: #0f172a;
@@ -995,7 +1028,9 @@ body.dark option {
 }
 
 
-/* DARK FLASHCARD */
+/* =========================
+   DARK FLASHCARD
+========================= */
 
 body.dark .flashcard-face {
   background: #111827;
@@ -1011,7 +1046,9 @@ body.dark .secondary-btn {
 }
 
 
-/* DARK QUIZ */
+/* =========================
+   DARK QUIZ
+========================= */
 
 body.dark .quiz-question {
   color: #f8fafc;
@@ -1053,7 +1090,9 @@ body.dark .quiz-result {
 }
 
 
-/* DARK INSIGHTS */
+/* =========================
+   DARK INSIGHTS
+========================= */
 
 body.dark .progress-track {
   background: #263449;
@@ -1064,6 +1103,14 @@ body.dark .feature-output {
 }
 
 body.dark .feature-output h4 {
+  color: #f8fafc;
+}
+
+body.dark .summary-text {
+  color: #cbd5e1;
+}
+
+body.dark .study-heading {
   color: #f8fafc;
 }
 
@@ -1126,32 +1173,4 @@ body.dark footer {
   .quiz-card {
     padding: 20px;
   }
-}
-.summary-text {
-  line-height: 1.8;
-  overflow-wrap: anywhere;
-}
-
-.study-heading {
-  display: block;
-  font-size: 1.15rem;
-  font-weight: 700;
-  margin: 24px 0 10px;
-  line-height: 1.4;
-}
-
-.study-heading:first-child {
-  margin-top: 0;
-}
-
-.summary-text strong {
-  font-weight: 700;
-}
-
-body.dark .study-heading {
-  color: inherit;
-}
-
-body.dark .summary-text {
-  color: inherit;
 }
