@@ -157,34 +157,72 @@ async function callOpenAI(prompt, apiKey) {
     body: JSON.stringify({
       model: MODEL,
       input: prompt,
-      max_output_tokens: 8000
+      reasoning: {
+        effort: "none"
+      },
+      max_output_tokens: 12000
     })
   });
 
   const data = await response.json();
 
-  if (!response.ok) {
-    console.error("OpenAI API error:", data);
+  console.log("FULL OPENAI RESPONSE:", JSON.stringify(data));
 
+  if (!response.ok) {
     throw new Error(
       data?.error?.message ||
-      `OpenAI request failed with status ${response.status}`
+      `OpenAI API error: ${response.status}`
     );
   }
 
-  console.log("OpenAI response:", data);
-
-  const output = extractOutputText(data);
-
-  if (!output) {
-    console.error("No text found in OpenAI response:", data);
-
-    throw new Error(
-      "AI returned an empty response. Check the Vercel deployment logs for the OpenAI response."
-    );
+  // First try the official convenience field
+  if (
+    typeof data.output_text === "string" &&
+    data.output_text.trim().length > 0
+  ) {
+    return data.output_text.trim();
   }
 
-  return output;
+  // Then inspect the Responses API output array
+  if (Array.isArray(data.output)) {
+    let result = "";
+
+    for (const item of data.output) {
+      if (!Array.isArray(item.content)) continue;
+
+      for (const content of item.content) {
+        if (
+          content.type === "output_text" &&
+          typeof content.text === "string"
+        ) {
+          result += content.text;
+        }
+      }
+    }
+
+    if (result.trim()) {
+      return result.trim();
+    }
+  }
+
+  // If the API returned a refusal
+  if (Array.isArray(data.output)) {
+    for (const item of data.output) {
+      if (!Array.isArray(item.content)) continue;
+
+      for (const content of item.content) {
+        if (content.type === "refusal" && content.refusal) {
+          throw new Error(
+            `AI refused the request: ${content.refusal}`
+          );
+        }
+      }
+    }
+  }
+
+  throw new Error(
+    "AI returned an empty response. Open the Vercel function logs and check FULL OPENAI RESPONSE."
+  );
 }
 
 function buildStudyPackPrompt(body) {
