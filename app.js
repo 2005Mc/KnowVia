@@ -7,8 +7,10 @@ const state = {
   flashcards: [],
   currentCard: 0,
   cardFlipped: false,
+  cardConfidence: {},
   quiz: [],
   quizResults: [],
+  retestQuiz: [],
   source: "topic",
   difficulty: "Medium",
   questionStyle: "Mixed",
@@ -16,10 +18,11 @@ const state = {
 };
 
 // ============================================================
-// DOM HELPERS
+// DOM
 // ============================================================
 
-const $ = (id) => document.getElementById(id);
+const $ = (id) =>
+  document.getElementById(id);
 
 function escapeHTML(value) {
   return String(value ?? "")
@@ -41,13 +44,17 @@ function showMessage(element, message) {
 // ============================================================
 
 async function callKnowviaAI(payload) {
-  const response = await fetch("/api/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  });
+
+  const response = await fetch(
+    "/api/chat",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    }
+  );
 
   let data;
 
@@ -61,54 +68,67 @@ async function callKnowviaAI(payload) {
 
   if (!response.ok) {
     throw new Error(
-      data?.error || "AI request failed."
+      data?.error ||
+      "AI request failed."
     );
   }
 
   return data;
 }
 
-function extractStudyPack(data) {
-  if (data?.result && typeof data.result === "object") {
-    return data.result;
-  }
-
-  if (data?.answer) {
-    try {
-      return JSON.parse(data.answer);
-    } catch {}
-  }
-
-  return data;
-}
-
 function extractJSON(data) {
-  if (data?.result && typeof data.result === "object") {
+
+  if (
+    data?.result &&
+    typeof data.result === "object"
+  ) {
     return data.result;
   }
 
   if (data?.answer) {
-    let text = data.answer.trim();
 
-    text = text.replace(/^```json\s*/i, "");
-    text = text.replace(/^```\s*/i, "");
-    text = text.replace(/\s*```$/i, "");
+    let text =
+      String(data.answer).trim();
+
+    text = text.replace(
+      /^```json\s*/i,
+      ""
+    );
+
+    text = text.replace(
+      /^```\s*/i,
+      ""
+    );
+
+    text = text.replace(
+      /\s*```$/i,
+      ""
+    );
 
     try {
       return JSON.parse(text);
-    } catch {}
+    } catch {
+      return null;
+    }
   }
 
-  return data;
+  return null;
 }
 
 function extractTextResponse(data) {
-  return (
-    data?.answer ||
-    data?.result ||
-    data?.text ||
-    "No response was returned."
-  );
+  if (typeof data?.answer === "string") {
+    return data.answer;
+  }
+
+  if (typeof data?.result === "string") {
+    return data.result;
+  }
+
+  if (typeof data?.text === "string") {
+    return data.text;
+  }
+
+  return "No response was returned.";
 }
 
 // ============================================================
@@ -116,41 +136,68 @@ function extractTextResponse(data) {
 // ============================================================
 
 function setupSourceTabs() {
-  const tabs = document.querySelectorAll(".source-tab");
+
+  const tabs =
+    document.querySelectorAll(
+      ".source-tab"
+    );
 
   tabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      tabs.forEach((item) =>
-        item.classList.remove("active")
-      );
 
-      tab.classList.add("active");
+    tab.addEventListener(
+      "click",
+      () => {
 
-      state.source = tab.dataset.source || "topic";
+        tabs.forEach((item) =>
+          item.classList.remove(
+            "active"
+          )
+        );
 
-      document
-        .querySelectorAll(".source-panel")
-        .forEach((panel) => {
-          panel.classList.remove("active");
-        });
+        tab.classList.add(
+          "active"
+        );
 
-      const panel = $(`${state.source}Panel`);
+        state.source =
+          tab.dataset.source ||
+          "topic";
 
-      if (panel) {
-        panel.classList.add("active");
+        document
+          .querySelectorAll(
+            ".source-panel"
+          )
+          .forEach((panel) => {
+            panel.classList.remove(
+              "active"
+            );
+          });
+
+        const panel =
+          $(`${state.source}Panel`);
+
+        if (panel) {
+          panel.classList.add(
+            "active"
+          );
+        }
       }
-    });
+    );
   });
 }
 
 // ============================================================
-// GET INPUT
+// MATERIAL
 // ============================================================
 
 function getCurrentMaterial() {
-  const topic = $("topic")?.value?.trim() || "";
+
+  const topic =
+    $("topic")?.value?.trim() ||
+    "";
+
   const typedNotes =
-    $("typedNotes")?.value?.trim() || "";
+    $("typedNotes")?.value?.trim() ||
+    "";
 
   if (state.source === "topic") {
     return topic;
@@ -162,7 +209,9 @@ function getCurrentMaterial() {
 
   if (state.source === "handwritten") {
     return (
-      $("handwrittenInput")?.value?.trim() ||
+      $("handwrittenInput")
+        ?.value
+        ?.trim() ||
       ""
     );
   }
@@ -179,59 +228,110 @@ function getCurrentMaterial() {
 // ============================================================
 
 async function generateStudyPack() {
-  const topic =
-    $("topic")?.value?.trim() || "Study Topic";
 
-  const material = getCurrentMaterial();
+  const topic =
+    $("topic")?.value?.trim() ||
+    "Study Topic";
+
+  const material =
+    getCurrentMaterial();
+
+  if (!material) {
+
+    showMessage(
+      $("generateStatus"),
+      "Please enter a topic or provide study material."
+    );
+
+    return;
+  }
 
   const difficulty =
-    $("difficulty")?.value || "Medium";
+    $("difficulty")?.value ||
+    "Medium";
 
   const questionStyle =
-    $("questionStyle")?.value || "Mixed";
+    $("questionStyle")?.value ||
+    "Mixed";
 
-  state.difficulty = difficulty;
-  state.questionStyle = questionStyle;
-  state.material = material;
+  state.difficulty =
+    difficulty;
 
-  const status = $("generateStatus");
+  state.questionStyle =
+    questionStyle;
 
-  showMessage(status, "Generating your study pack...");
+  state.material =
+    material;
 
-  const button = $("generateBtn");
+  showMessage(
+    $("generateStatus"),
+    "Generating your study pack..."
+  );
+
+  const button =
+    $("generateBtn");
 
   if (button) {
     button.disabled = true;
-    button.textContent = "Generating...";
+    button.textContent =
+      "Generating...";
   }
 
   try {
-    const data = await callKnowviaAI({
-      task: "study_pack",
-      topic,
-      difficulty,
-      material,
-      quizStyle: questionStyle
-    });
 
-    const pack = extractStudyPack(data);
+    const data =
+      await callKnowviaAI({
+        task: "study_pack",
+        topic,
+        difficulty,
+        material,
+        quizStyle:
+          questionStyle
+      });
 
-    if (!pack || !pack.summary) {
+    const pack =
+      extractJSON(data);
+
+    if (!pack) {
       throw new Error(
-        "The AI returned an incomplete study pack."
+        "The AI returned an invalid study pack."
       );
     }
 
-    state.studyPack = pack;
-    state.flashcards = Array.isArray(pack.flashcards)
-      ? pack.flashcards
-      : [];
+    if (
+      !Array.isArray(
+        pack.flashcards
+      ) ||
+      pack.flashcards.length < 10
+    ) {
+      throw new Error(
+        "The AI did not return 10 flashcards. Please generate again."
+      );
+    }
 
-    state.quiz = Array.isArray(pack.quiz)
-      ? pack.quiz
-      : [];
+    if (
+      !Array.isArray(pack.quiz) ||
+      pack.quiz.length < 10
+    ) {
+      throw new Error(
+        "The AI did not return 10 quiz questions. Please generate again."
+      );
+    }
 
+    state.studyPack =
+      pack;
+
+    state.flashcards =
+      pack.flashcards.slice(0, 10);
+
+    state.quiz =
+      pack.quiz.slice(0, 10);
+
+    state.currentCard = 0;
+    state.cardFlipped = false;
+    state.cardConfidence = {};
     state.quizResults = [];
+    state.retestQuiz = [];
 
     renderSummary(pack);
     renderFlashcards();
@@ -239,7 +339,7 @@ async function generateStudyPack() {
     resetInsights();
 
     showMessage(
-      status,
+      $("generateStatus"),
       "Study pack generated successfully!"
     );
 
@@ -250,16 +350,21 @@ async function generateStudyPack() {
       });
 
   } catch (error) {
+
     console.error(error);
 
     showMessage(
-      status,
-      error.message || "Something went wrong."
+      $("generateStatus"),
+      error.message ||
+      "Something went wrong."
     );
+
   } finally {
+
     if (button) {
       button.disabled = false;
-      button.textContent = "Generate Study Pack";
+      button.textContent =
+        "Generate Study Pack";
     }
   }
 }
@@ -268,38 +373,157 @@ async function generateStudyPack() {
 // SUMMARY
 // ============================================================
 
+function renderList(
+  items
+) {
+
+  if (!Array.isArray(items)) {
+    return "";
+  }
+
+  return items
+    .filter(Boolean)
+    .map(
+      (item) =>
+        `<li>${escapeHTML(item)}</li>`
+    )
+    .join("");
+}
+
+function renderSection(
+  title,
+  value
+) {
+
+  if (!value) {
+    return "";
+  }
+
+  if (Array.isArray(value)) {
+
+    if (!value.length) {
+      return "";
+    }
+
+    return `
+      <section class="study-section">
+        <h3>${escapeHTML(title)}</h3>
+        <ul>
+          ${renderList(value)}
+        </ul>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="study-section">
+      <h3>${escapeHTML(title)}</h3>
+      <p>
+        ${escapeHTML(value)}
+      </p>
+    </section>
+  `;
+}
+
 function renderSummary(pack) {
-  const container = $("summaryContent");
+
+  const container =
+    $("summaryContent");
 
   if (!container) return;
 
-  const concepts = Array.isArray(pack.keyConcepts)
-    ? pack.keyConcepts
-    : [];
+  const study =
+    pack.studyMatter || {};
 
   container.innerHTML = `
+
     <div class="summary-main">
+
       <h3>Summary</h3>
-      <p>${escapeHTML(pack.summary)}</p>
+
+      <p>
+        ${escapeHTML(
+          pack.summary || ""
+        )}
+      </p>
+
     </div>
 
-    ${
-      concepts.length
-        ? `
-      <div class="key-concepts">
-        <h3>Key Concepts</h3>
-        <ul>
-          ${concepts
-            .map(
-              (item) =>
-                `<li>${escapeHTML(item)}</li>`
-            )
-            .join("")}
-        </ul>
-      </div>
-    `
-        : ""
-    }
+    ${renderSection(
+      "Introduction",
+      study.introduction
+    )}
+
+    ${renderSection(
+      "Definition",
+      study.definition
+    )}
+
+    ${renderSection(
+      "Core Concept",
+      study.coreConcept
+    )}
+
+    ${renderSection(
+      "Key Concepts",
+      study.keyConcepts
+    )}
+
+    ${renderSection(
+      "Types / Classification",
+      study.types
+    )}
+
+    ${renderSection(
+      "Components / Elements",
+      study.components
+    )}
+
+    ${renderSection(
+      "Working / Process / Mechanism",
+      study.working
+    )}
+
+    ${renderSection(
+      "Important Characteristics",
+      study.characteristics
+    )}
+
+    ${renderSection(
+      "Examples",
+      study.examples
+    )}
+
+    ${renderSection(
+      "Applications",
+      study.applications
+    )}
+
+    ${renderSection(
+      "Advantages",
+      study.advantages
+    )}
+
+    ${renderSection(
+      "Limitations",
+      study.limitations
+    )}
+
+    ${renderSection(
+      "Comparison",
+      study.comparison
+    )}
+
+    ${renderSection(
+      "Important Exam Points",
+      study.examPoints
+    )}
+
+    ${renderSection(
+      "Quick Revision",
+      study.quickRevision
+    )}
+
   `;
 }
 
@@ -308,47 +532,75 @@ function renderSummary(pack) {
 // ============================================================
 
 function renderFlashcards() {
-  const question = $("cardQuestion");
-  const answer = $("cardAnswer");
-  const progress = $("cardProgress");
-  const card = $("flashcard");
 
-  if (!question || !answer) return;
+  const question =
+    $("cardQuestion");
+
+  const answer =
+    $("cardAnswer");
+
+  const progress =
+    $("cardProgress");
+
+  const card =
+    $("flashcard");
+
+  if (!question || !answer) {
+    return;
+  }
 
   if (!state.flashcards.length) {
+
     question.textContent =
       "Generate a study pack to create flashcards.";
+
     answer.textContent = "";
+
+    if (progress) {
+      progress.textContent =
+        "0 / 10";
+    }
+
     return;
   }
 
   const item =
-    state.flashcards[state.currentCard];
+    state.flashcards[
+      state.currentCard
+    ];
 
   question.textContent =
-    item?.question || "No question available.";
+    item?.question ||
+    "No question available.";
 
   answer.textContent =
-    item?.answer || "No answer available.";
+    item?.answer ||
+    "No answer available.";
 
   if (progress) {
+
     progress.textContent =
-      `${state.currentCard + 1} / ${state.flashcards.length}`;
+      `${state.currentCard + 1} / 10`;
   }
 
   state.cardFlipped = false;
 
   if (card) {
-    card.classList.remove("flipped");
+    card.classList.remove(
+      "flipped"
+    );
   }
 }
 
 function flipCard() {
-  const card = $("flashcard");
+
+  const card =
+    $("flashcard");
 
   if (!card) return;
 
-  state.cardFlipped = !state.cardFlipped;
+  state.cardFlipped =
+    !state.cardFlipped;
 
   card.classList.toggle(
     "flipped",
@@ -357,7 +609,10 @@ function flipCard() {
 }
 
 function nextCard() {
-  if (!state.flashcards.length) return;
+
+  if (!state.flashcards.length) {
+    return;
+  }
 
   state.currentCard =
     (state.currentCard + 1) %
@@ -367,14 +622,61 @@ function nextCard() {
 }
 
 function prevCard() {
-  if (!state.flashcards.length) return;
+
+  if (!state.flashcards.length) {
+    return;
+  }
 
   state.currentCard =
-    (state.currentCard - 1 +
-      state.flashcards.length) %
+    (
+      state.currentCard -
+      1 +
+      state.flashcards.length
+    ) %
     state.flashcards.length;
 
   renderFlashcards();
+}
+
+// ============================================================
+// FLASHCARD CONFIDENCE
+// ============================================================
+
+function setupConfidenceButtons() {
+
+  document
+    .querySelectorAll(
+      "[data-confidence]"
+    )
+    .forEach((button) => {
+
+      button.addEventListener(
+        "click",
+        () => {
+
+          const level =
+            button.dataset.confidence;
+
+          state.cardConfidence[
+            state.currentCard
+          ] = level;
+
+          document
+            .querySelectorAll(
+              "[data-confidence]"
+            )
+            .forEach((item) =>
+              item.classList.remove(
+                "selected"
+              )
+            );
+
+          button.classList.add(
+            "selected"
+          );
+        }
+      );
+    });
 }
 
 // ============================================================
@@ -382,57 +684,99 @@ function prevCard() {
 // ============================================================
 
 function renderQuiz() {
-  const container = $("quizContainer");
+
+  const container =
+    $("quizContainer");
 
   if (!container) return;
 
   if (!state.quiz.length) {
+
     container.innerHTML =
       "<p>Generate a study pack to start the quiz.</p>";
+
     return;
   }
 
-  container.innerHTML = state.quiz
-    .map((item, index) => {
-      const options = Array.isArray(item.options)
-        ? item.options
-        : [];
+  container.innerHTML = `
 
-      return `
-        <div class="quiz-question" data-index="${index}">
-          <h3>
-            ${index + 1}. ${escapeHTML(item.question)}
-          </h3>
+    <div class="quiz-header">
+      <h3>10-Question Quiz</h3>
+      <div id="quizScore">
+        Answer all 10 questions.
+      </div>
+    </div>
 
-          <div class="quiz-options">
-            ${options
-              .slice(0, 4)
-              .map(
-                (option, optionIndex) => `
-                  <button
-                    class="quiz-option"
-                    data-question="${index}"
-                    data-option="${optionIndex}"
-                  >
-                    ${escapeHTML(option)}
-                  </button>
-                `
-              )
-              .join("")}
-          </div>
+    ${state.quiz
+      .map(
+        (item, index) => {
 
-          <div
-            class="quiz-feedback"
-            id="quizFeedback${index}"
-          ></div>
-        </div>
-      `;
-    })
-    .join("");
+          const options =
+            Array.isArray(
+              item.options
+            )
+              ? item.options.slice(
+                  0,
+                  4
+                )
+              : [];
+
+          return `
+            <div
+              class="quiz-question"
+              data-index="${index}"
+            >
+
+              <h3>
+                ${index + 1}.
+                ${escapeHTML(
+                  item.question
+                )}
+              </h3>
+
+              <div class="quiz-options">
+
+                ${options
+                  .map(
+                    (
+                      option,
+                      optionIndex
+                    ) => `
+                      <button
+                        type="button"
+                        class="quiz-option"
+                        data-question="${index}"
+                        data-option="${optionIndex}"
+                      >
+                        ${escapeHTML(
+                          option
+                        )}
+                      </button>
+                    `
+                  )
+                  .join("")}
+
+              </div>
+
+              <div
+                class="quiz-feedback"
+                id="quizFeedback${index}"
+              ></div>
+
+            </div>
+          `;
+        }
+      )
+      .join("")}
+
+  `;
 
   container
-    .querySelectorAll(".quiz-option")
+    .querySelectorAll(
+      ".quiz-option"
+    )
     .forEach((button) => {
+
       button.addEventListener(
         "click",
         handleQuizAnswer
@@ -441,70 +785,160 @@ function renderQuiz() {
 }
 
 function handleQuizAnswer(event) {
-  const button = event.currentTarget;
+
+  const button =
+    event.currentTarget;
 
   const questionIndex =
-    Number(button.dataset.question);
+    Number(
+      button.dataset.question
+    );
 
   const selected =
-    Number(button.dataset.option);
+    Number(
+      button.dataset.option
+    );
 
   const question =
-    state.quiz[questionIndex];
+    state.quiz[
+      questionIndex
+    ];
 
-  if (!question) return;
+  if (!question) {
+    return;
+  }
 
   const correct =
-    Number(question.correctAnswer);
+    Number(
+      question.correctAnswer
+    );
 
-  const questionContainer =
-    button.closest(".quiz-question");
+  const container =
+    button.closest(
+      ".quiz-question"
+    );
 
-  if (!questionContainer) return;
+  if (!container) {
+    return;
+  }
+
+  if (
+    state.quizResults.some(
+      (item) =>
+        item.questionIndex ===
+        questionIndex
+    )
+  ) {
+    return;
+  }
 
   const buttons =
-    questionContainer.querySelectorAll(
+    container.querySelectorAll(
       ".quiz-option"
     );
 
-  buttons.forEach((item) => {
-    item.disabled = true;
-  });
-
-  if (selected === correct) {
-    button.classList.add("correct");
-  } else {
-    button.classList.add("wrong");
-
-    buttons.forEach((item) => {
-      if (
-        Number(item.dataset.option) === correct
-      ) {
-        item.classList.add("correct");
-      }
-    });
-  }
-
-  const feedback = $(
-    `quizFeedback${questionIndex}`
+  buttons.forEach(
+    (item) => {
+      item.disabled = true;
+    }
   );
 
+  if (selected === correct) {
+
+    button.classList.add(
+      "correct"
+    );
+
+  } else {
+
+    button.classList.add(
+      "wrong"
+    );
+
+    buttons.forEach(
+      (item) => {
+
+        if (
+          Number(
+            item.dataset.option
+          ) === correct
+        ) {
+          item.classList.add(
+            "correct"
+          );
+        }
+      }
+    );
+  }
+
+  const feedback =
+    $(
+      `quizFeedback${questionIndex}`
+    );
+
   if (feedback) {
+
     feedback.textContent =
       question.explanation ||
       "Review this concept once more.";
   }
 
   state.quizResults.push({
-    question: question.question,
+
+    questionIndex,
+
+    question:
+      question.question,
+
     selectedAnswer:
-      question.options?.[selected] || "",
+      question.options?.[
+        selected
+      ] || "",
+
     correctAnswer:
-      question.options?.[correct] || "",
-    isCorrect: selected === correct
+      question.options?.[
+        correct
+      ] || "",
+
+    isCorrect:
+      selected === correct
   });
 
   updateUnderstanding();
+  updateQuizScore();
+}
+
+function updateQuizScore() {
+
+  const score =
+    $("quizScore");
+
+  if (!score) return;
+
+  const answered =
+    state.quizResults.length;
+
+  const correct =
+    state.quizResults.filter(
+      (item) =>
+        item.isCorrect
+    ).length;
+
+  if (answered < 10) {
+
+    score.textContent =
+      `${answered}/10 answered • ${correct} correct`;
+
+    return;
+  }
+
+  const percentage =
+    Math.round(
+      (correct / 10) * 100
+    );
+
+  score.textContent =
+    `Final Score: ${correct}/10 (${percentage}%)`;
 }
 
 // ============================================================
@@ -512,76 +946,105 @@ function handleQuizAnswer(event) {
 // ============================================================
 
 function updateUnderstanding() {
-  const results = state.quizResults;
 
-  if (!results.length) return;
+  const results =
+    state.quizResults;
 
-  const correct = results.filter(
-    (item) => item.isCorrect
-  ).length;
-
-  const score = Math.round(
-    (correct / results.length) * 100
-  );
-
-  const bar = $("understandingBar");
-  const text = $("understandingScore");
-
-  if (bar) {
-    bar.style.width = `${score}%`;
+  if (!results.length) {
+    return;
   }
 
-  if (text) {
-    text.textContent = `${score}%`;
+  const correct =
+    results.filter(
+      (item) =>
+        item.isCorrect
+    ).length;
+
+  const score =
+    Math.round(
+      (correct /
+        results.length) *
+        100
+    );
+
+  if ($("understandingBar")) {
+    $("understandingBar")
+      .style.width =
+      `${score}%`;
   }
 
-  const recallScore =
-    Math.min(100, score + 5);
+  if ($("understandingScore")) {
+    $("understandingScore")
+      .textContent =
+      `${score}%`;
+  }
 
-  const applicationScore =
-    Math.max(0, score - 5);
+  const recall =
+    Math.min(
+      100,
+      score + 5
+    );
+
+  const application =
+    Math.max(
+      0,
+      score - 5
+    );
 
   if ($("recallBar")) {
-    $("recallBar").style.width =
-      `${recallScore}%`;
+    $("recallBar")
+      .style.width =
+      `${recall}%`;
   }
 
   if ($("recallScore")) {
-    $("recallScore").textContent =
-      `${recallScore}%`;
+    $("recallScore")
+      .textContent =
+      `${recall}%`;
   }
 
   if ($("applicationBar")) {
-    $("applicationBar").style.width =
-      `${applicationScore}%`;
+    $("applicationBar")
+      .style.width =
+      `${application}%`;
   }
 
   if ($("applicationScore")) {
-    $("applicationScore").textContent =
-      `${applicationScore}%`;
+    $("applicationScore")
+      .textContent =
+      `${application}%`;
   }
 }
 
 function resetInsights() {
+
   [
     "understandingBar",
     "recallBar",
     "applicationBar"
-  ].forEach((id) => {
-    if ($(id)) {
-      $(id).style.width = "0%";
+  ].forEach(
+    (id) => {
+
+      if ($(id)) {
+        $(id).style.width =
+          "0%";
+      }
     }
-  });
+  );
 
   [
     "understandingScore",
     "recallScore",
     "applicationScore"
-  ].forEach((id) => {
-    if ($(id)) {
-      $(id).textContent = "0%";
+  ].forEach(
+    (id) => {
+
+      if ($(id)) {
+        $(id).textContent =
+          "0%";
+      }
     }
-  });
+  );
 
   if ($("weakTopicsContent")) {
     $("weakTopicsContent").innerHTML =
@@ -600,65 +1063,271 @@ function resetInsights() {
 }
 
 // ============================================================
-// WEAK TOPICS
+// WEAK TOPICS + RETEST
 // ============================================================
 
 async function targetedRetest() {
-  const output = $("weakTopicsContent");
+
+  const output =
+    $("weakTopicsContent");
 
   if (!output) return;
 
   if (!state.quizResults.length) {
+
     output.innerHTML =
-      "<p>Please complete some quiz questions first.</p>";
+      "<p>Please answer some quiz questions first.</p>";
+
     return;
   }
 
   output.innerHTML =
-    "<p>Analyzing your weak topics...</p>";
+    "<p>Analyzing your weak topics and creating a targeted re-test...</p>";
 
   try {
-    const data = await callKnowviaAI({
-      task: "weak_topics",
-      quizResults: state.quizResults
-    });
 
-    const result = extractJSON(data);
+    const data =
+      await callKnowviaAI({
 
-    const topics = Array.isArray(
-      result?.weakTopics
-    )
-      ? result.weakTopics
-      : [];
+        task:
+          "weak_topics",
+
+        quizResults:
+          state.quizResults
+
+      });
+
+    const result =
+      extractJSON(data);
+
+    const topics =
+      Array.isArray(
+        result?.weakTopics
+      )
+        ? result.weakTopics
+        : [];
+
+    const retest =
+      Array.isArray(
+        result?.retestQuiz
+      )
+        ? result.retestQuiz
+        : [];
+
+    state.retestQuiz =
+      retest.slice(0, 5);
 
     output.innerHTML = `
+
       ${
         topics.length
           ? `
-        <h4>Topics to revise</h4>
-        <ul>
-          ${topics
-            .map(
-              (topic) =>
-                `<li>${escapeHTML(topic)}</li>`
-            )
-            .join("")}
-        </ul>
-      `
-          : "<p>No major weak topics detected.</p>"
+            <h4>Topics to revise</h4>
+
+            <ul>
+              ${topics
+                .map(
+                  (topic) =>
+                    `<li>${escapeHTML(
+                      topic
+                    )}</li>`
+                )
+                .join("")}
+            </ul>
+          `
+          : `
+            <p>
+              No major weak topics detected.
+            </p>
+          `
       }
 
       ${
         result?.explanation
-          ? `<p>${escapeHTML(
-              result.explanation
-            )}</p>`
+          ? `
+            <p>
+              ${escapeHTML(
+                result.explanation
+              )}
+            </p>
+          `
           : ""
       }
+
+      ${
+        state.retestQuiz.length
+          ? `
+            <h4>Targeted Re-test</h4>
+
+            <div class="retest-quiz">
+
+              ${state.retestQuiz
+                .map(
+                  (
+                    item,
+                    index
+                  ) => `
+                    <div class="quiz-question">
+
+                      <h3>
+                        ${index + 1}.
+                        ${escapeHTML(
+                          item.question
+                        )}
+                      </h3>
+
+                      <div class="quiz-options">
+
+                        ${item.options
+                          .slice(
+                            0,
+                            4
+                          )
+                          .map(
+                            (
+                              option,
+                              optionIndex
+                            ) => `
+                              <button
+                                type="button"
+                                class="quiz-option retest-option"
+                                data-retest="${index}"
+                                data-option="${optionIndex}"
+                              >
+                                ${escapeHTML(
+                                  option
+                                )}
+                              </button>
+                            `
+                          )
+                          .join("")}
+
+                      </div>
+
+                      <div
+                        class="quiz-feedback"
+                        id="retestFeedback${index}"
+                      ></div>
+
+                    </div>
+                  `
+                )
+                .join("")}
+
+            </div>
+          `
+          : ""
+      }
+
     `;
+
+    output
+      .querySelectorAll(
+        ".retest-option"
+      )
+      .forEach(
+        (button) => {
+
+          button.addEventListener(
+            "click",
+            handleRetestAnswer
+          );
+
+        }
+      );
+
   } catch (error) {
+
     output.innerHTML =
-      `<p>${escapeHTML(error.message)}</p>`;
+      `<p>${escapeHTML(
+        error.message
+      )}</p>`;
+  }
+}
+
+function handleRetestAnswer(
+  event
+) {
+
+  const button =
+    event.currentTarget;
+
+  const index =
+    Number(
+      button.dataset.retest
+    );
+
+  const selected =
+    Number(
+      button.dataset.option
+    );
+
+  const item =
+    state.retestQuiz[index];
+
+  if (!item) return;
+
+  const correct =
+    Number(
+      item.correctAnswer
+    );
+
+  const container =
+    button.closest(
+      ".quiz-question"
+    );
+
+  if (!container) return;
+
+  const buttons =
+    container.querySelectorAll(
+      ".retest-option"
+    );
+
+  buttons.forEach(
+    (item) => {
+      item.disabled = true;
+    }
+  );
+
+  if (selected === correct) {
+
+    button.classList.add(
+      "correct"
+    );
+
+  } else {
+
+    button.classList.add(
+      "wrong"
+    );
+
+    buttons.forEach(
+      (item) => {
+
+        if (
+          Number(
+            item.dataset.option
+          ) === correct
+        ) {
+          item.classList.add(
+            "correct"
+          );
+        }
+      }
+    );
+  }
+
+  const feedback =
+    $(
+      `retestFeedback${index}`
+    );
+
+  if (feedback) {
+
+    feedback.textContent =
+      item.explanation ||
+      "Review this concept again.";
   }
 }
 
@@ -667,18 +1336,25 @@ async function targetedRetest() {
 // ============================================================
 
 async function explainMistake() {
-  const output = $("mistakeContent");
+
+  const output =
+    $("mistakeContent");
 
   if (!output) return;
 
   const mistake =
     [...state.quizResults]
       .reverse()
-      .find((item) => !item.isCorrect);
+      .find(
+        (item) =>
+          !item.isCorrect
+      );
 
   if (!mistake) {
+
     output.innerHTML =
       "<p>No incorrect answer found yet.</p>";
+
     return;
   }
 
@@ -686,20 +1362,41 @@ async function explainMistake() {
     "<p>Explaining your mistake...</p>";
 
   try {
-    const data = await callKnowviaAI({
-      task: "explain_mistake",
-      question: mistake.question,
-      studentAnswer: mistake.selectedAnswer,
-      correctAnswer: mistake.correctAnswer
-    });
+
+    const data =
+      await callKnowviaAI({
+
+        task:
+          "explain_mistake",
+
+        question:
+          mistake.question,
+
+        studentAnswer:
+          mistake.selectedAnswer,
+
+        correctAnswer:
+          mistake.correctAnswer
+
+      });
+
+    output.innerHTML = `
+      <p>
+        ${escapeHTML(
+          extractTextResponse(data)
+        ).replace(
+          /\n/g,
+          "<br>"
+        )}
+      </p>
+    `;
+
+  } catch (error) {
 
     output.innerHTML =
       `<p>${escapeHTML(
-        extractTextResponse(data)
+        error.message
       )}</p>`;
-  } catch (error) {
-    output.innerHTML =
-      `<p>${escapeHTML(error.message)}</p>`;
   }
 }
 
@@ -708,13 +1405,17 @@ async function explainMistake() {
 // ============================================================
 
 async function generateKnowledgeMap() {
-  const output = $("knowledgeMapContent");
+
+  const output =
+    $("knowledgeMapContent");
 
   if (!output) return;
 
   if (!state.quizResults.length) {
+
     output.innerHTML =
       "<p>Complete the quiz first.</p>";
+
     return;
   }
 
@@ -722,49 +1423,78 @@ async function generateKnowledgeMap() {
     "<p>Building your knowledge map...</p>";
 
   try {
-    const data = await callKnowviaAI({
-      task: "knowledge_map",
-      quizResults: state.quizResults
-    });
 
-    const result = extractJSON(data);
+    const data =
+      await callKnowviaAI({
 
-    const nodes = Array.isArray(result?.nodes)
-      ? result.nodes
-      : [];
+        task:
+          "knowledge_map",
+
+        quizResults:
+          state.quizResults
+
+      });
+
+    const result =
+      extractJSON(data);
+
+    const nodes =
+      Array.isArray(
+        result?.nodes
+      )
+        ? result.nodes
+        : [];
 
     if (!nodes.length) {
+
       output.innerHTML =
         "<p>No knowledge map data was returned.</p>";
+
       return;
     }
 
     output.innerHTML = `
+
       <div class="knowledge-map-list">
+
         ${nodes
           .map(
             (node) => `
               <div class="knowledge-node">
+
                 <strong>
-                  ${escapeHTML(node.topic)}
+                  ${escapeHTML(
+                    node.topic
+                  )}
                 </strong>
 
                 <span>
-                  ${escapeHTML(node.status)}
+                  ${escapeHTML(
+                    node.status
+                  )}
                 </span>
 
                 <p>
-                  ${escapeHTML(node.reason)}
+                  ${escapeHTML(
+                    node.reason
+                  )}
                 </p>
+
               </div>
             `
           )
           .join("")}
+
       </div>
+
     `;
+
   } catch (error) {
+
     output.innerHTML =
-      `<p>${escapeHTML(error.message)}</p>`;
+      `<p>${escapeHTML(
+        error.message
+      )}</p>`;
   }
 }
 
@@ -772,35 +1502,69 @@ async function generateKnowledgeMap() {
 // EXTRA AI FEATURES
 // ============================================================
 
-async function runFeature(task, title) {
-  const output = $("featureOutput");
+async function runFeature(
+  task,
+  title
+) {
+
+  const output =
+    $("featureOutput");
 
   if (!output) return;
 
   const topic =
     $("topic")?.value?.trim() ||
+    state.studyPack?.topic ||
     "the current study topic";
 
-  output.innerHTML =
-    `<h3>${escapeHTML(title)}</h3>
-     <p>Thinking...</p>`;
+  const material =
+    state.material ||
+    getCurrentMaterial() ||
+    JSON.stringify(
+      state.studyPack?.studyMatter ||
+      {}
+    );
+
+  output.innerHTML = `
+    <h3>
+      ${escapeHTML(title)}
+    </h3>
+
+    <p>
+      Thinking...
+    </p>
+  `;
 
   try {
-    const data = await callKnowviaAI({
-      task,
-      topic,
-      material: state.material ||
-        getCurrentMaterial(),
-      difficulty: state.difficulty
-    });
 
-    const answer = extractTextResponse(data);
+    const data =
+      await callKnowviaAI({
+
+        task,
+
+        topic,
+
+        material,
+
+        difficulty:
+          state.difficulty
+
+      });
+
+    const answer =
+      extractTextResponse(data);
 
     output.innerHTML = `
-      <h3>${escapeHTML(title)}</h3>
+      <h3>
+        ${escapeHTML(title)}
+      </h3>
+
       <div class="feature-answer">
         ${escapeHTML(answer)
-          .replace(/\n/g, "<br>")}
+          .replace(
+            /\n/g,
+            "<br>"
+          )}
       </div>
     `;
 
@@ -810,18 +1574,48 @@ async function runFeature(task, title) {
     });
 
   } catch (error) {
+
     output.innerHTML =
-      `<p>${escapeHTML(error.message)}</p>`;
+      `<p>${escapeHTML(
+        error.message
+      )}</p>`;
   }
 }
 
+// ============================================================
+// ASK MY NOTES
+// ============================================================
+
 async function askMyNotes() {
+
   const question =
-    prompt("What do you want to ask about your notes?");
+    window.prompt(
+      "What do you want to ask about your notes?"
+    );
 
-  if (!question) return;
+  if (!question) {
+    return;
+  }
 
-  const output = $("featureOutput");
+  const material =
+    state.material ||
+    getCurrentMaterial();
+
+  if (!material) {
+
+    const output =
+      $("featureOutput");
+
+    if (output) {
+      output.innerHTML =
+        "<p>Please provide notes first.</p>";
+    }
+
+    return;
+  }
+
+  const output =
+    $("featureOutput");
 
   if (!output) return;
 
@@ -829,25 +1623,42 @@ async function askMyNotes() {
     "<p>Searching your notes...</p>";
 
   try {
-    const data = await callKnowviaAI({
-      task: "ask_notes",
-      question,
-      material:
-        state.material ||
-        getCurrentMaterial()
-    });
+
+    const data =
+      await callKnowviaAI({
+
+        task:
+          "ask_notes",
+
+        question,
+
+        material
+
+      });
 
     output.innerHTML = `
-      <h3>Ask My Notes</h3>
+
+      <h3>
+        Ask My Notes
+      </h3>
+
       <div class="feature-answer">
         ${escapeHTML(
           extractTextResponse(data)
-        ).replace(/\n/g, "<br>")}
+        ).replace(
+          /\n/g,
+          "<br>"
+        )}
       </div>
+
     `;
+
   } catch (error) {
+
     output.innerHTML =
-      `<p>${escapeHTML(error.message)}</p>`;
+      `<p>${escapeHTML(
+        error.message
+      )}</p>`;
   }
 }
 
@@ -855,16 +1666,22 @@ async function askMyNotes() {
 // HANDWRITTEN OCR
 // ============================================================
 
-async function processHandwrittenImage(file) {
-  const status = $("handwrittenStatus");
+async function processHandwrittenImage(
+  file
+) {
+
+  const status =
+    $("handwrittenStatus");
 
   if (!file) return;
 
   if (!window.Tesseract) {
+
     showMessage(
       status,
       "OCR library is not available."
     );
+
     return;
   }
 
@@ -874,19 +1691,23 @@ async function processHandwrittenImage(file) {
   );
 
   try {
+
     const result =
       await Tesseract.recognize(
         file,
         "eng",
         {
           logger: (info) => {
+
             if (
               info.status ===
               "recognizing text"
             ) {
+
               const percent =
                 Math.round(
-                  (info.progress || 0) * 100
+                  (info.progress || 0) *
+                    100
                 );
 
               showMessage(
@@ -899,13 +1720,17 @@ async function processHandwrittenImage(file) {
       );
 
     const text =
-      result?.data?.text?.trim() || "";
+      result?.data?.text?.trim() ||
+      "";
 
     if ($("handwrittenInput")) {
-      $("handwrittenInput").value = text;
+
+      $("handwrittenInput")
+        .value = text;
     }
 
-    state.material = text;
+    state.material =
+      text;
 
     showMessage(
       status,
@@ -915,29 +1740,36 @@ async function processHandwrittenImage(file) {
     );
 
   } catch (error) {
+
+    console.error(error);
+
     showMessage(
       status,
       "Could not read the handwritten image."
     );
-
-    console.error(error);
   }
 }
 
 // ============================================================
-// PDF TEXT EXTRACTION
+// PDF
 // ============================================================
 
-async function extractPDFText(file) {
-  const status = $("pdfStatus");
+async function extractPDFText(
+  file
+) {
+
+  const status =
+    $("pdfStatus");
 
   if (!file) return;
 
   if (!window.pdfjsLib) {
+
     showMessage(
       status,
       "PDF library is not available."
     );
+
     return;
   }
 
@@ -947,45 +1779,59 @@ async function extractPDFText(file) {
   );
 
   try {
+
     const buffer =
       await file.arrayBuffer();
 
     const pdf =
-      await pdfjsLib.getDocument({
-        data: buffer
-      }).promise;
+      await pdfjsLib
+        .getDocument({
+          data: buffer
+        })
+        .promise;
 
     let fullText = "";
 
     for (
       let pageNumber = 1;
-      pageNumber <= pdf.numPages;
+      pageNumber <=
+      pdf.numPages;
       pageNumber++
     ) {
+
       const page =
-        await pdf.getPage(pageNumber);
+        await pdf.getPage(
+          pageNumber
+        );
 
       const content =
         await page.getTextContent();
 
       const pageText =
         content.items
-          .map((item) => item.str)
+          .map(
+            (item) =>
+              item.str
+          )
           .join(" ");
 
       fullText +=
         `\n\nPage ${pageNumber}\n${pageText}`;
     }
 
-    fullText = fullText.trim();
+    fullText =
+      fullText.trim();
 
-    state.material = fullText;
+    state.material =
+      fullText;
 
     if (!fullText) {
+
       showMessage(
         status,
-        "This PDF does not contain selectable text. Image/scanned PDF OCR is not enabled yet."
+        "This PDF has no selectable text. Scanned PDF OCR needs to be added separately."
       );
+
       return;
     }
 
@@ -995,6 +1841,7 @@ async function extractPDFText(file) {
     );
 
   } catch (error) {
+
     console.error(error);
 
     showMessage(
@@ -1009,19 +1856,29 @@ async function extractPDFText(file) {
 // ============================================================
 
 function setupTheme() {
-  const button = $("themeBtn");
+
+  const button =
+    $("themeBtn");
 
   if (!button) return;
 
-  button.addEventListener("click", () => {
-    document.body.classList.toggle("dark");
+  button.addEventListener(
+    "click",
+    () => {
 
-    const dark =
-      document.body.classList.contains("dark");
+      document.body.classList.toggle(
+        "dark"
+      );
 
-    button.textContent =
-      dark ? "☀️" : "🌙";
-  });
+      const dark =
+        document.body.classList.contains(
+          "dark"
+        );
+
+      button.textContent =
+        dark ? "☀️" : "🌙";
+    }
+  );
 }
 
 // ============================================================
@@ -1029,92 +1886,110 @@ function setupTheme() {
 // ============================================================
 
 function setupEvents() {
-  $("generateBtn")?.addEventListener(
-    "click",
-    generateStudyPack
-  );
 
-  $("flipCard")?.addEventListener(
-    "click",
-    flipCard
-  );
+  $("generateBtn")
+    ?.addEventListener(
+      "click",
+      generateStudyPack
+    );
 
-  $("nextCard")?.addEventListener(
-    "click",
-    nextCard
-  );
+  $("flipCard")
+    ?.addEventListener(
+      "click",
+      flipCard
+    );
 
-  $("prevCard")?.addEventListener(
-    "click",
-    prevCard
-  );
+  $("nextCard")
+    ?.addEventListener(
+      "click",
+      nextCard
+    );
 
-  $("weakTopicsBtn")?.addEventListener(
-    "click",
-    targetedRetest
-  );
+  $("prevCard")
+    ?.addEventListener(
+      "click",
+      prevCard
+    );
 
-  $("explainMistakeBtn")?.addEventListener(
-    "click",
-    explainMistake
-  );
+  $("weakTopicsBtn")
+    ?.addEventListener(
+      "click",
+      targetedRetest
+    );
 
-  $("knowledgeMapBtn")?.addEventListener(
-    "click",
-    generateKnowledgeMap
-  );
+  $("explainMistakeBtn")
+    ?.addEventListener(
+      "click",
+      explainMistake
+    );
 
-  $("teachBtn")?.addEventListener(
-    "click",
-    () =>
-      runFeature(
-        "teach",
-        "Teach Me"
-      )
-  );
+  $("knowledgeMapBtn")
+    ?.addEventListener(
+      "click",
+      generateKnowledgeMap
+    );
 
-  $("studySessionBtn")?.addEventListener(
-    "click",
-    () =>
-      runFeature(
-        "study_session",
-        "Study Session"
-      )
-  );
+  $("teachBtn")
+    ?.addEventListener(
+      "click",
+      () =>
+        runFeature(
+          "teach",
+          "Teach Me"
+        )
+    );
 
-  $("examModeBtn")?.addEventListener(
-    "click",
-    () =>
-      runFeature(
-        "exam",
-        "Exam Mode"
-      )
-  );
+  $("studySessionBtn")
+    ?.addEventListener(
+      "click",
+      () =>
+        runFeature(
+          "study_session",
+          "Study Session"
+        )
+    );
 
-  $("askNotesBtn")?.addEventListener(
-    "click",
-    askMyNotes
-  );
+  $("examModeBtn")
+    ?.addEventListener(
+      "click",
+      () =>
+        runFeature(
+          "exam",
+          "Exam Mode"
+        )
+    );
 
-  $("handwrittenInput")?.addEventListener(
-    "change",
-    (event) => {
-      const file =
-        event.target.files?.[0];
+  $("askNotesBtn")
+    ?.addEventListener(
+      "click",
+      askMyNotes
+    );
 
-      processHandwrittenImage(file);
-    }
-  );
+  $("handwrittenInput")
+    ?.addEventListener(
+      "change",
+      (event) => {
 
-  $("pdfInput")?.addEventListener(
-    "change",
-    (event) => {
-      const file =
-        event.target.files?.[0];
+        const file =
+          event.target.files?.[0];
 
-      extractPDFText(file);
-    }
-  );
+        processHandwrittenImage(
+          file
+        );
+      }
+    );
+
+  $("pdfInput")
+    ?.addEventListener(
+      "change",
+      (event) => {
+
+        const file =
+          event.target.files?.[0];
+
+        extractPDFText(file);
+      }
+    );
 }
 
 // ============================================================
@@ -1122,18 +1997,27 @@ function setupEvents() {
 // ============================================================
 
 function setupNavigation() {
+
   document
-    .querySelectorAll('a[href^="#"]')
+    .querySelectorAll(
+      'a[href^="#"]'
+    )
     .forEach((link) => {
+
       link.addEventListener(
         "click",
         (event) => {
+
           const target =
             document.querySelector(
-              link.getAttribute("href")
+              link.getAttribute(
+                "href"
+              )
             );
 
-          if (!target) return;
+          if (!target) {
+            return;
+          }
 
           event.preventDefault();
 
@@ -1152,11 +2036,15 @@ function setupNavigation() {
 document.addEventListener(
   "DOMContentLoaded",
   () => {
+
     setupSourceTabs();
     setupTheme();
     setupEvents();
     setupNavigation();
+    setupConfidenceButtons();
+
     renderFlashcards();
     resetInsights();
+
   }
 );
