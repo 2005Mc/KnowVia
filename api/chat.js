@@ -1,6 +1,6 @@
 // ============================================================
 // KNOWVIA - GEMINI AI BACKEND
-// Gemini Interactions API
+// Simple Interactions API version
 // ============================================================
 
 const MODELS = [
@@ -12,7 +12,7 @@ const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/interactions";
 
 // ============================================================
-// HELPERS
+// HELPER
 // ============================================================
 
 function send(res, status, data) {
@@ -22,193 +22,75 @@ function send(res, status, data) {
 function cleanJSON(text) {
   if (!text) return "";
 
-  let value = text.trim();
+  let value = String(text).trim();
 
-  // Remove markdown JSON fences if Gemini adds them
+  // Remove markdown fences if Gemini adds them
   value = value.replace(/^```json\s*/i, "");
   value = value.replace(/^```\s*/i, "");
   value = value.replace(/\s*```$/i, "");
 
+  // Sometimes the model adds text before/after JSON.
+  // Try to isolate the main JSON object.
+  const firstBrace = value.indexOf("{");
+  const lastBrace = value.lastIndexOf("}");
+
+  if (
+    firstBrace !== -1 &&
+    lastBrace !== -1 &&
+    lastBrace > firstBrace
+  ) {
+    value = value.slice(firstBrace, lastBrace + 1);
+  }
+
   return value.trim();
 }
 
+// ============================================================
+// GET TEXT FROM INTERACTIONS RESPONSE
+// ============================================================
+
 function getModelText(data) {
-  if (!data || !Array.isArray(data.steps)) {
-    return "";
-  }
+  if (!data) return "";
 
-  // Find the model output step
-  for (const step of data.steps) {
-    if (step.type !== "model_output") continue;
+  // Current Interactions API response
+  if (Array.isArray(data.steps)) {
+    for (const step of data.steps) {
+      if (step.type !== "model_output") continue;
 
-    if (!Array.isArray(step.content)) continue;
+      if (!Array.isArray(step.content)) continue;
 
-    for (const item of step.content) {
-      if (item.type === "text" && typeof item.text === "string") {
-        return item.text;
+      for (const item of step.content) {
+        if (
+          item.type === "text" &&
+          typeof item.text === "string"
+        ) {
+          return item.text;
+        }
       }
     }
+  }
+
+  // Extra fallback in case Google changes the response shape
+  if (
+    typeof data.output_text === "string" &&
+    data.output_text.trim()
+  ) {
+    return data.output_text;
   }
 
   return "";
 }
 
 // ============================================================
-// JSON SCHEMAS
+// GEMINI REQUEST
 // ============================================================
 
-const studyPackSchema = {
-  type: "object",
-  properties: {
-    summary: {
-      type: "string"
-    },
-    keyConcepts: {
-      type: "array",
-      items: {
-        type: "string"
-      }
-    },
-    flashcards: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          question: { type: "string" },
-          answer: { type: "string" }
-        },
-        required: ["question", "answer"]
-      }
-    },
-    quiz: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          question: { type: "string" },
-          options: {
-            type: "array",
-            items: { type: "string" }
-          },
-          correctAnswer: {
-            type: "integer"
-          },
-          explanation: {
-            type: "string"
-          }
-        },
-        required: [
-          "question",
-          "options",
-          "correctAnswer",
-          "explanation"
-        ]
-      }
-    }
-  },
-  required: [
-    "summary",
-    "keyConcepts",
-    "flashcards",
-    "quiz"
-  ]
-};
-
-const flashcardSchema = {
-  type: "object",
-  properties: {
-    flashcards: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          question: { type: "string" },
-          answer: { type: "string" }
-        },
-        required: ["question", "answer"]
-      }
-    }
-  },
-  required: ["flashcards"]
-};
-
-const quizSchema = {
-  type: "object",
-  properties: {
-    quiz: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          question: { type: "string" },
-          options: {
-            type: "array",
-            items: { type: "string" }
-          },
-          correctAnswer: {
-            type: "integer"
-          },
-          explanation: {
-            type: "string"
-          }
-        },
-        required: [
-          "question",
-          "options",
-          "correctAnswer",
-          "explanation"
-        ]
-      }
-    }
-  },
-  required: ["quiz"]
-};
-
-const weakTopicsSchema = {
-  type: "object",
-  properties: {
-    weakTopics: {
-      type: "array",
-      items: {
-        type: "string"
-      }
-    },
-    explanation: {
-      type: "string"
-    }
-  },
-  required: ["weakTopics", "explanation"]
-};
-
-const knowledgeMapSchema = {
-  type: "object",
-  properties: {
-    nodes: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          topic: { type: "string" },
-          status: { type: "string" },
-          reason: { type: "string" }
-        },
-        required: ["topic", "status", "reason"]
-      }
-    }
-  },
-  required: ["nodes"]
-};
-
-// ============================================================
-// GEMINI CALL
-// ============================================================
-
-async function callGemini(prompt, schema = null) {
+async function callGemini(prompt) {
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
     throw new Error(
-      "GEMINI_API_KEY is missing. Add it in Vercel Environment Variables."
+      "GEMINI_API_KEY is missing in Vercel."
     );
   }
 
@@ -216,78 +98,187 @@ async function callGemini(prompt, schema = null) {
 
   for (const model of MODELS) {
     try {
+      console.log("Trying Gemini model:", model);
+
+      // IMPORTANT:
+      // There is intentionally NO response_format here.
+      // There is NO generation_config here.
+      // There is NO mime_type here.
+
       const body = {
-        model,
+        model: model,
         input: prompt,
         store: false
       };
 
-      // IMPORTANT:
-      // This is the CURRENT Interactions API format.
-      // Do NOT put this inside generation_config.
-      if (schema) {
-        body.response_format = {
-          type: "text",
-          mime_type: "application/json",
-          schema
-        };
+      const response = await fetch(
+        GEMINI_API_URL,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey
+          },
+          body: JSON.stringify(body)
+        }
+      );
+
+      const rawText = await response.text();
+
+      let data;
+
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error(
+          `Gemini returned a non-JSON response: ${rawText.slice(0, 500)}`
+        );
       }
 
-      const response = await fetch(GEMINI_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey
-        },
-        body: JSON.stringify(body)
-      });
-
-      const data = await response.json();
-
       if (!response.ok) {
-        lastError = new Error(
+        const message =
           data?.error?.message ||
-          `Gemini request failed with status ${response.status}`
+          `Gemini request failed with status ${response.status}`;
+
+        console.error(
+          `Gemini ${model} error:`,
+          data
         );
 
-        console.error(`Gemini ${model} error:`, data);
+        lastError = new Error(message);
         continue;
       }
 
       const text = getModelText(data);
 
       if (!text) {
+        console.error(
+          "Gemini response contained no text:",
+          data
+        );
+
         lastError = new Error(
           "Gemini returned an empty response."
         );
+
         continue;
       }
+
+      console.log(
+        `Gemini ${model} succeeded.`
+      );
 
       return text;
 
     } catch (error) {
+      console.error(
+        `Gemini ${model} failed:`,
+        error
+      );
+
       lastError = error;
-      console.error(`Gemini ${model} failed:`, error);
     }
   }
 
-  throw lastError || new Error("Gemini request failed.");
+  throw (
+    lastError ||
+    new Error("Gemini request failed.")
+  );
 }
 
 // ============================================================
-// PROMPTS
+// SCHEMAS
+// ============================================================
+// These are ONLY used inside our prompts.
+// They are NOT sent as response_format to Gemini.
+// This avoids the API error completely.
+// ============================================================
+
+const studyPackFormat = `
+{
+  "summary": "string",
+  "keyConcepts": ["string"],
+  "flashcards": [
+    {
+      "question": "string",
+      "answer": "string"
+    }
+  ],
+  "quiz": [
+    {
+      "question": "string",
+      "options": ["string", "string", "string", "string"],
+      "correctAnswer": 0,
+      "explanation": "string"
+    }
+  ]
+}
+`;
+
+const flashcardFormat = `
+{
+  "flashcards": [
+    {
+      "question": "string",
+      "answer": "string"
+    }
+  ]
+}
+`;
+
+const quizFormat = `
+{
+  "quiz": [
+    {
+      "question": "string",
+      "options": ["string", "string", "string", "string"],
+      "correctAnswer": 0,
+      "explanation": "string"
+    }
+  ]
+}
+`;
+
+const weakTopicsFormat = `
+{
+  "weakTopics": ["string"],
+  "explanation": "string"
+}
+`;
+
+const knowledgeMapFormat = `
+{
+  "nodes": [
+    {
+      "topic": "string",
+      "status": "Strong",
+      "reason": "string"
+    }
+  ]
+}
+`;
+
+// ============================================================
+// STUDY PACK
 // ============================================================
 
 function studyPackPrompt(body) {
-  const topic = body.topic || "General Topic";
-  const difficulty = body.difficulty || "Medium";
-  const material = body.material || "";
-  const quizStyle = body.quizStyle || "Mixed";
+  const topic =
+    body.topic || "General Topic";
+
+  const difficulty =
+    body.difficulty || "Medium";
+
+  const material =
+    body.material || "";
+
+  const quizStyle =
+    body.quizStyle || "Mixed";
 
   return `
 You are Knowvia, an AI study assistant.
 
-Create a complete study pack for the learner.
+Create a complete study pack.
 
 TOPIC:
 ${topic}
@@ -299,48 +290,70 @@ QUESTION STYLE:
 ${quizStyle}
 
 STUDY MATERIAL:
-${material || "No additional material was provided. Use reliable general knowledge about the topic."}
+${
+  material ||
+  "No additional material was provided. Use reliable general knowledge."
+}
 
-Requirements:
+Create:
 
 1. SUMMARY
-Give a clear, student-friendly explanation of the topic.
-Match the requested difficulty.
+
+Give a clear and student-friendly explanation.
 
 2. KEY CONCEPTS
-Give the most important concepts the learner should remember.
-Keep them concise.
+
+Give the most important concepts.
 
 3. FLASHCARDS
+
 Create 8 useful flashcards.
-Questions should test understanding, not just wording.
 
 4. QUIZ
+
 Create 5 multiple-choice questions.
-Each question MUST have exactly 4 options.
-correctAnswer MUST be the zero-based index:
+
+Every question must have EXACTLY 4 options.
+
+correctAnswer MUST be a zero-based number:
 0, 1, 2, or 3.
+
+5. EXPLANATIONS
+
+Give a short explanation for each question.
 
 Question style:
 ${quizStyle}
 
-For "Exam Pattern", make questions similar to academic examination questions.
-For "Short Answer", still provide four choices but make the question test short-answer concepts.
-For "MCQ", make standard MCQs.
-For "Mixed", combine conceptual, application and recall questions.
+If the style is Exam Pattern, make questions similar to college examination questions.
 
-5. EXPLANATIONS
-Give a short explanation for every quiz answer.
+If the style is MCQ, make standard MCQs.
 
-Return ONLY the requested JSON structure.
+If the style is Mixed, combine recall, understanding and application.
+
+IMPORTANT:
+
+Return ONLY valid JSON.
+
+Do NOT use Markdown.
+
+Do NOT write anything before or after the JSON.
+
+Use EXACTLY this structure:
+
+${studyPackFormat}
 `;
 }
+
+// ============================================================
+// FLASHCARDS
+// ============================================================
 
 function flashcardsPrompt(body) {
   return `
 You are Knowvia, an AI study assistant.
 
-Create 10 high-quality flashcards.
+Create 10 useful study flashcards.
 
 TOPIC:
 ${body.topic || "General Topic"}
@@ -351,15 +364,30 @@ ${body.material || "Use reliable general knowledge."}
 DIFFICULTY:
 ${body.difficulty || "Medium"}
 
-Each flashcard must contain:
+Each flashcard needs:
 - question
 - answer
 
-Focus on important concepts, definitions, relationships, applications and common exam points.
+Focus on:
+- important concepts
+- definitions
+- relationships
+- applications
+- exam points
 
-Return only JSON.
+Return ONLY valid JSON.
+
+Do not use Markdown.
+
+Use exactly this structure:
+
+${flashcardFormat}
 `;
 }
+
+// ============================================================
+// QUIZ
+// ============================================================
 
 function quizPrompt(body) {
   return `
@@ -380,80 +408,121 @@ QUESTION STYLE:
 ${body.quizStyle || "Mixed"}
 
 Rules:
+
 - Exactly 4 options per question.
+- Only one option is correct.
 - correctAnswer must be 0, 1, 2 or 3.
-- Only one option may be correct.
 - Include an explanation.
 - Avoid ambiguous questions.
 
-Return only JSON.
+Return ONLY valid JSON.
+
+Do not use Markdown.
+
+Use exactly this structure:
+
+${quizFormat}
 `;
 }
+
+// ============================================================
+// WEAK TOPICS
+// ============================================================
 
 function weakTopicsPrompt(body) {
   return `
-Analyze the learner's quiz performance.
+You are Knowvia's Weak Topic Detector.
 
-QUIZ RESULTS:
-${JSON.stringify(body.quizResults || [], null, 2)}
+Analyze this quiz performance:
 
-Identify the topics or concepts where the learner appears weakest.
+${JSON.stringify(
+  body.quizResults || [],
+  null,
+  2
+)}
 
-Return:
-- weakTopics: array of concise topic names
-- explanation: short explanation
+Identify concepts where the learner appears weak.
 
-Do not invent information that cannot reasonably be inferred from the quiz results.
+Do not invent information.
 
-Return only JSON.
+Return ONLY valid JSON.
+
+Use exactly this structure:
+
+${weakTopicsFormat}
 `;
 }
+
+// ============================================================
+// KNOWLEDGE MAP
+// ============================================================
 
 function knowledgeMapPrompt(body) {
   return `
-Create a simple knowledge map from these quiz results.
+You are Knowvia's Knowledge Map system.
 
-QUIZ RESULTS:
-${JSON.stringify(body.quizResults || [], null, 2)}
+Analyze these quiz results:
 
-For each important concept, classify the learner's status as one of:
-- Strong
-- Developing
-- Weak
+${JSON.stringify(
+  body.quizResults || [],
+  null,
+  2
+)}
+
+For each important concept classify the learner as:
+
+Strong
+Developing
+Weak
 
 Give a short reason.
 
-Return only JSON.
+Return ONLY valid JSON.
+
+Use exactly this structure:
+
+${knowledgeMapFormat}
 `;
 }
 
+// ============================================================
+// TEXT FEATURES
+// ============================================================
+
 function textPrompt(task, body) {
-  const topic = body.topic || "the study topic";
-  const material = body.material || "";
+  const topic =
+    body.topic || "the study topic";
+
+  const material =
+    body.material || "";
 
   if (task === "teach") {
     return `
 You are Knowvia's Teach Me tutor.
 
 Teach the student about:
+
 ${topic}
 
 Difficulty:
 ${body.difficulty || "Medium"}
 
 Material:
-${material || "Use reliable general knowledge."}
+${
+  material ||
+  "Use reliable general knowledge."
+}
 
-Explain step by step in simple language.
+Explain step by step using simple language.
 
-Use:
+Include:
 - simple explanation
 - examples
 - important points
 - quick check questions
 - final recap
 
-Do not be unnecessarily complicated.
+Do not make it unnecessarily complicated.
 `;
   }
 
@@ -462,22 +531,27 @@ Do not be unnecessarily complicated.
 You are Knowvia's Study Session coach.
 
 Create a focused study session for:
+
 ${topic}
 
 Difficulty:
 ${body.difficulty || "Medium"}
 
 Material:
-${material || "Use reliable general knowledge."}
+${
+  material ||
+  "Use reliable general knowledge."
+}
 
 Include:
+
 1. What to study first
 2. Important concepts
 3. Practice activity
 4. Quick self-test
 5. Final revision checklist
 
-Keep it practical and student-friendly.
+Keep it practical.
 `;
   }
 
@@ -485,23 +559,28 @@ Keep it practical and student-friendly.
     return `
 You are Knowvia's Exam Mode.
 
-Create an exam-style practice set for:
+Create an exam preparation guide for:
+
 ${topic}
 
 Difficulty:
 ${body.difficulty || "Medium"}
 
 Material:
-${material || "Use reliable general knowledge."}
+${
+  material ||
+  "Use reliable general knowledge."
+}
 
 Include:
+
 - important exam areas
 - likely question types
 - practice questions
 - last-minute revision points
 - common mistakes
 
-Make it useful for a college student preparing for an examination.
+Make it useful for a college student.
 `;
   }
 
@@ -510,22 +589,24 @@ Make it useful for a college student preparing for an examination.
 You are Knowvia's Ask My Notes assistant.
 
 STUDY MATERIAL:
+
 ${material}
 
 USER QUESTION:
+
 ${body.question || ""}
 
-Answer ONLY using the supplied study material when possible.
+Answer using the supplied study material whenever possible.
 
-If the material does not contain enough information, clearly say that the answer is not available in the supplied notes instead of pretending that it is.
+If the answer is not present in the notes, clearly say that the supplied notes do not contain enough information.
 
-Give a clear student-friendly answer.
+Do not pretend information is in the notes when it is not.
 `;
   }
 
   if (task === "explain_mistake") {
     return `
-You are Knowvia's mistake-explanation tutor.
+You are Knowvia's mistake explanation tutor.
 
 QUESTION:
 ${body.question || ""}
@@ -537,6 +618,7 @@ CORRECT ANSWER:
 ${body.correctAnswer || ""}
 
 Explain:
+
 1. What the student misunderstood.
 2. Why the correct answer is correct.
 3. How to avoid the same mistake.
@@ -559,10 +641,11 @@ Give a useful student-friendly response.
 }
 
 // ============================================================
-// MAIN HANDLER
+// MAIN API HANDLER
 // ============================================================
 
 export default async function handler(req, res) {
+
   if (req.method !== "POST") {
     return send(res, 405, {
       error: "Method not allowed."
@@ -570,7 +653,9 @@ export default async function handler(req, res) {
   }
 
   try {
+
     const body = req.body || {};
+
     const task = body.task;
 
     if (!task) {
@@ -580,37 +665,32 @@ export default async function handler(req, res) {
     }
 
     let prompt;
-    let schema = null;
     let isJSON = false;
 
     switch (task) {
+
       case "study_pack":
         prompt = studyPackPrompt(body);
-        schema = studyPackSchema;
         isJSON = true;
         break;
 
       case "flashcards":
         prompt = flashcardsPrompt(body);
-        schema = flashcardSchema;
         isJSON = true;
         break;
 
       case "quiz":
         prompt = quizPrompt(body);
-        schema = quizSchema;
         isJSON = true;
         break;
 
       case "weak_topics":
         prompt = weakTopicsPrompt(body);
-        schema = weakTopicsSchema;
         isJSON = true;
         break;
 
       case "knowledge_map":
         prompt = knowledgeMapPrompt(body);
-        schema = knowledgeMapSchema;
         isJSON = true;
         break;
 
@@ -628,13 +708,22 @@ export default async function handler(req, res) {
         });
     }
 
-    const answer = await callGemini(prompt, schema);
+    const answer =
+      await callGemini(prompt);
+
+    // ========================================================
+    // JSON TASKS
+    // ========================================================
 
     if (isJSON) {
-      const cleaned = cleanJSON(answer);
+
+      const cleaned =
+        cleanJSON(answer);
 
       try {
-        const parsed = JSON.parse(cleaned);
+
+        const parsed =
+          JSON.parse(cleaned);
 
         return send(res, 200, {
           result: parsed,
@@ -642,21 +731,34 @@ export default async function handler(req, res) {
         });
 
       } catch (error) {
-        console.error("JSON parsing failed:", cleaned);
+
+        console.error(
+          "Gemini JSON parsing failed:",
+          cleaned
+        );
 
         return send(res, 500, {
-          error: "Gemini returned invalid JSON.",
+          error:
+            "Gemini returned invalid JSON. Please try again.",
           raw: cleaned
         });
       }
     }
 
+    // ========================================================
+    // NORMAL TEXT TASKS
+    // ========================================================
+
     return send(res, 200, {
-      answer
+      answer: answer
     });
 
   } catch (error) {
-    console.error("Knowvia API error:", error);
+
+    console.error(
+      "KNOWVIA API ERROR:",
+      error
+    );
 
     return send(res, 500, {
       error:
