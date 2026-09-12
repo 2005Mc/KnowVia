@@ -43,27 +43,65 @@ function getBody(req) {
 }
 
 function extractOutputText(data) {
-  if (data?.output_text) {
-    return data.output_text;
+  // Normal Responses API output
+  if (typeof data?.output_text === "string" && data.output_text.trim()) {
+    return data.output_text.trim();
   }
 
-  if (!Array.isArray(data?.output)) {
-    return "";
-  }
+  // Read text from output messages
+  if (Array.isArray(data?.output)) {
+    const parts = [];
 
-  let text = "";
+    for (const item of data.output) {
+      if (!Array.isArray(item?.content)) continue;
 
-  for (const item of data.output) {
-    if (!Array.isArray(item?.content)) continue;
+      for (const content of item.content) {
+        if (typeof content?.text === "string" && content.text.trim()) {
+          parts.push(content.text);
+        }
 
-    for (const content of item.content) {
-      if (typeof content?.text === "string") {
-        text += content.text;
+        // Some response formats may put the text inside a nested value
+        if (
+          content?.text &&
+          typeof content.text === "object" &&
+          typeof content.text.value === "string"
+        ) {
+          parts.push(content.text.value);
+        }
       }
+    }
+
+    if (parts.length > 0) {
+      return parts.join("\n").trim();
     }
   }
 
-  return text;
+  // Fallback for other possible response structures
+  if (Array.isArray(data?.choices)) {
+    const parts = [];
+
+    for (const choice of data.choices) {
+      const content = choice?.message?.content;
+
+      if (typeof content === "string" && content.trim()) {
+        parts.push(content);
+      }
+
+      if (Array.isArray(content)) {
+        for (const item of content) {
+          if (typeof item?.text === "string" && item.text.trim()) {
+            parts.push(item.text);
+          }
+        }
+      }
+    }
+
+    if (parts.length > 0) {
+      return parts.join("\n").trim();
+    }
+  }
+
+  return "";
 }
 
 function removeCodeFences(text) {
@@ -118,24 +156,32 @@ async function callOpenAI(prompt, apiKey) {
     },
     body: JSON.stringify({
       model: MODEL,
-      input: prompt
+      input: prompt,
+      max_output_tokens: 8000
     })
   });
 
   const data = await response.json();
 
   if (!response.ok) {
-    const message =
-      data?.error?.message ||
-      `OpenAI request failed with status ${response.status}`;
+    console.error("OpenAI API error:", data);
 
-    throw new Error(message);
+    throw new Error(
+      data?.error?.message ||
+      `OpenAI request failed with status ${response.status}`
+    );
   }
+
+  console.log("OpenAI response:", data);
 
   const output = extractOutputText(data);
 
   if (!output) {
-    throw new Error("The AI returned an empty response.");
+    console.error("No text found in OpenAI response:", data);
+
+    throw new Error(
+      "AI returned an empty response. Check the Vercel deployment logs for the OpenAI response."
+    );
   }
 
   return output;
