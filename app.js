@@ -1,28 +1,32 @@
-// ============================================================
-// KNOWVIA - FRONTEND
-// ============================================================
+"use strict";
+
+/* =========================================================
+   KNOWVIA - FRONTEND
+   ========================================================= */
 
 const state = {
   studyPack: null,
   flashcards: [],
   currentCard: 0,
   cardFlipped: false,
-  cardConfidence: {},
+  confidence: {},
   quiz: [],
   quizResults: [],
-  retestQuiz: [],
   source: "topic",
   difficulty: "Medium",
   questionStyle: "Mixed",
-  material: ""
+  material: "",
+  weakTopics: [],
+  lastMistake: null
 };
 
-// ============================================================
-// DOM
-// ============================================================
+/* =========================================================
+   BASIC HELPERS
+   ========================================================= */
 
-const $ = (id) =>
-  document.getElementById(id);
+function $(id) {
+  return document.getElementById(id);
+}
 
 function escapeHTML(value) {
   return String(value ?? "")
@@ -33,2018 +37,1461 @@ function escapeHTML(value) {
     .replace(/'/g, "&#039;");
 }
 
-function showMessage(element, message) {
-  if (element) {
-    element.textContent = message;
+function formatText(text) {
+  if (!text) return "";
+
+  return escapeHTML(text)
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\n\n+/g, "</p><p>")
+    .replace(/\n/g, "<br>");
+}
+
+function setStatus(message, type = "") {
+  const el = $("generateStatus");
+  if (!el) return;
+
+  el.textContent = message;
+  el.className = "status-message";
+
+  if (type) {
+    el.classList.add(type);
   }
 }
 
-// ============================================================
-// API
-// ============================================================
+function setFeatureOutput(html) {
+  const el = $("featureOutput");
+  if (!el) return;
+  el.innerHTML = html;
+}
 
-async function callKnowviaAI(payload) {
+function showLoading(message = "Thinking...") {
+  setStatus(message);
+}
 
-  const response = await fetch(
-    "/api/chat",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
-    }
-  );
+function getTopic() {
+  const topic = $("topic");
+  return topic ? topic.value.trim() : "";
+}
+
+/* =========================================================
+   API
+   ========================================================= */
+
+async function api(task, extra = {}) {
+  const response = await fetch("/api/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      task,
+      difficulty: state.difficulty,
+      questionStyle: state.questionStyle,
+      ...extra
+    })
+  });
 
   let data;
 
   try {
     data = await response.json();
   } catch {
-    throw new Error(
-      "The server returned an invalid response."
-    );
+    throw new Error("The server returned an invalid response.");
   }
 
   if (!response.ok) {
     throw new Error(
       data?.error ||
-      "AI request failed."
+      data?.message ||
+      "Something went wrong while contacting Gemini."
     );
   }
 
   return data;
 }
 
-function extractJSON(data) {
-
-  if (
-    data?.result &&
-    typeof data.result === "object"
-  ) {
-    return data.result;
-  }
-
-  if (data?.answer) {
-
-    let text =
-      String(data.answer).trim();
-
-    text = text.replace(
-      /^```json\s*/i,
-      ""
-    );
-
-    text = text.replace(
-      /^```\s*/i,
-      ""
-    );
-
-    text = text.replace(
-      /\s*```$/i,
-      ""
-    );
-
-    try {
-      return JSON.parse(text);
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-}
-
-function extractTextResponse(data) {
-  if (typeof data?.answer === "string") {
-    return data.answer;
-  }
-
-  if (typeof data?.result === "string") {
-    return data.result;
-  }
-
-  if (typeof data?.text === "string") {
-    return data.text;
-  }
-
-  return "No response was returned.";
-}
-
-// ============================================================
-// SOURCE TABS
-// ============================================================
-
-function setupSourceTabs() {
-
-  const tabs =
-    document.querySelectorAll(
-      ".source-tab"
-    );
-
-  tabs.forEach((tab) => {
-
-    tab.addEventListener(
-      "click",
-      () => {
-
-        tabs.forEach((item) =>
-          item.classList.remove(
-            "active"
-          )
-        );
-
-        tab.classList.add(
-          "active"
-        );
-
-        state.source =
-          tab.dataset.source ||
-          "topic";
-
-        document
-          .querySelectorAll(
-            ".source-panel"
-          )
-          .forEach((panel) => {
-            panel.classList.remove(
-              "active"
-            );
-          });
-
-        const panel =
-          $(`${state.source}Panel`);
-
-        if (panel) {
-          panel.classList.add(
-            "active"
-          );
-        }
-      }
-    );
-  });
-}
-
-// ============================================================
-// MATERIAL
-// ============================================================
+/* =========================================================
+   SOURCE HANDLING
+   ========================================================= */
 
 function getCurrentMaterial() {
-
-  const topic =
-    $("topic")?.value?.trim() ||
-    "";
-
-  const typedNotes =
-    $("typedNotes")?.value?.trim() ||
-    "";
-
   if (state.source === "topic") {
-    return topic;
+    return getTopic();
   }
 
   if (state.source === "typed") {
-    return typedNotes;
+    return ($("typedNotes")?.value || "").trim();
   }
 
   if (state.source === "handwritten") {
-    return (
-      $("handwrittenInput")
-        ?.value
-        ?.trim() ||
-      ""
-    );
+    return ($("handwrittenInput")?.value || "").trim();
   }
 
   if (state.source === "pdf") {
     return state.material || "";
   }
 
-  return topic || typedNotes;
+  return "";
 }
 
-// ============================================================
-// GENERATE STUDY PACK
-// ============================================================
+function buildStudyMaterialText() {
+  if (!state.studyPack) {
+    return state.material || getCurrentMaterial();
+  }
+
+  const s = state.studyPack.studyMatter || state.studyPack;
+
+  const sections = [];
+
+  const add = (title, value) => {
+    if (!value) return;
+
+    if (Array.isArray(value)) {
+      if (value.length) {
+        sections.push(
+          `${title}:\n${value.map((x) => `- ${x}`).join("\n")}`
+        );
+      }
+    } else {
+      sections.push(`${title}:\n${value}`);
+    }
+  };
+
+  add("Introduction", s.introduction);
+  add("Definition", s.definition);
+  add("Core Concept", s.coreConcept);
+  add("Key Concepts", s.keyConcepts);
+  add("Types", s.types);
+  add("Components", s.components);
+  add("Working", s.working);
+  add("Characteristics", s.characteristics);
+  add("Examples", s.examples);
+  add("Applications", s.applications);
+  add("Advantages", s.advantages);
+  add("Limitations", s.limitations);
+  add("Comparison", s.comparison);
+  add("Important Exam Points", s.importantExamPoints);
+  add("Quick Revision", s.quickRevision);
+
+  return sections.join("\n\n");
+}
+
+/* =========================================================
+   SOURCE TABS
+   ========================================================= */
+
+function setupSourceTabs() {
+  const tabs = document.querySelectorAll(".source-tab");
+
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+
+      state.source = tab.dataset.source || "topic";
+
+      document.querySelectorAll(".source-panel").forEach((panel) => {
+        panel.style.display = "none";
+      });
+
+      const panel = $(`${state.source}Panel`);
+
+      if (panel) {
+        panel.style.display = "block";
+      }
+    });
+  });
+}
+
+/* =========================================================
+   GENERATE STUDY PACK
+   ========================================================= */
 
 async function generateStudyPack() {
-
-  const topic =
-    $("topic")?.value?.trim() ||
-    "Study Topic";
-
-  const material =
-    getCurrentMaterial();
+  const material = getCurrentMaterial();
 
   if (!material) {
-
-    showMessage(
-      $("generateStatus"),
-      "Please enter a topic or provide study material."
+    setStatus(
+      "Please enter a topic or provide study material first.",
+      "error"
     );
-
     return;
   }
 
-  const difficulty =
-    $("difficulty")?.value ||
-    "Medium";
+  state.difficulty = $("difficulty")?.value || "Medium";
+  state.questionStyle = $("questionStyle")?.value || "Mixed";
+  state.material = material;
 
-  const questionStyle =
-    $("questionStyle")?.value ||
-    "Mixed";
+  const btn = $("generateBtn");
 
-  state.difficulty =
-    difficulty;
-
-  state.questionStyle =
-    questionStyle;
-
-  state.material =
-    material;
-
-  showMessage(
-    $("generateStatus"),
-    "Generating your study pack..."
-  );
-
-  const button =
-    $("generateBtn");
-
-  if (button) {
-    button.disabled = true;
-    button.textContent =
-      "Generating...";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Generating...";
   }
 
+  showLoading(
+    `Creating a ${state.difficulty.toLowerCase()}-level study pack...`
+  );
+
   try {
+    const data = await api("study_pack", {
+      material
+    });
 
-    const data =
-      await callKnowviaAI({
-        task: "study_pack",
-        topic,
-        difficulty,
-        material,
-        quizStyle:
-          questionStyle
-      });
+    if (!data.result) {
+      throw new Error("Gemini did not return a study pack.");
+    }
 
-    const pack =
-      extractJSON(data);
+    state.studyPack = data.result;
 
-    if (!pack) {
+    const studyMatter =
+      state.studyPack.studyMatter || state.studyPack;
+
+    state.flashcards = Array.isArray(state.studyPack.flashcards)
+      ? state.studyPack.flashcards.slice(0, 10)
+      : [];
+
+    state.quiz = Array.isArray(state.studyPack.quiz)
+      ? state.studyPack.quiz.slice(0, 10)
+      : [];
+
+    if (state.flashcards.length !== 10) {
       throw new Error(
-        "The AI returned an invalid study pack."
+        `Gemini returned ${state.flashcards.length} flashcards instead of 10. Please generate again.`
       );
     }
 
-    if (
-      !Array.isArray(
-        pack.flashcards
-      ) ||
-      pack.flashcards.length < 10
-    ) {
+    if (state.quiz.length !== 10) {
       throw new Error(
-        "The AI did not return 10 flashcards. Please generate again."
+        `Gemini returned ${state.quiz.length} quiz questions instead of 10. Please generate again.`
       );
     }
 
-    if (
-      !Array.isArray(pack.quiz) ||
-      pack.quiz.length < 10
-    ) {
-      throw new Error(
-        "The AI did not return 10 quiz questions. Please generate again."
-      );
-    }
-
-    state.studyPack =
-      pack;
-
-    state.flashcards =
-      pack.flashcards.slice(0, 10);
-
-    state.quiz =
-      pack.quiz.slice(0, 10);
+    state.material = buildStudyMaterialText();
 
     state.currentCard = 0;
     state.cardFlipped = false;
-    state.cardConfidence = {};
+    state.confidence = {};
     state.quizResults = [];
-    state.retestQuiz = [];
+    state.weakTopics = [];
+    state.lastMistake = null;
 
-    renderSummary(pack);
+    renderSummary();
     renderFlashcards();
     renderQuiz();
     resetInsights();
 
-    showMessage(
-      $("generateStatus"),
-      "Study pack generated successfully!"
+    setStatus(
+      `${state.difficulty} study pack generated successfully.`,
+      "success"
     );
 
     document
-      .querySelector("#summary")
-      ?.scrollIntoView({
-        behavior: "smooth"
-      });
+      .getElementById("summary")
+      ?.scrollIntoView({ behavior: "smooth" });
 
   } catch (error) {
-
     console.error(error);
 
-    showMessage(
-      $("generateStatus"),
-      error.message ||
-      "Something went wrong."
+    setStatus(
+      error.message || "Could not generate the study pack.",
+      "error"
     );
-
   } finally {
-
-    if (button) {
-      button.disabled = false;
-      button.textContent =
-        "Generate Study Pack";
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Generate Study Pack";
     }
   }
 }
 
-// ============================================================
-// SUMMARY
-// ============================================================
+/* =========================================================
+   SUMMARY
+   ========================================================= */
 
-function renderList(
-  items
-) {
+function renderSection(title, content) {
+  if (!content) return "";
 
-  if (!Array.isArray(items)) {
-    return "";
-  }
+  let html = "";
 
-  return items
-    .filter(Boolean)
-    .map(
-      (item) =>
-        `<li>${escapeHTML(item)}</li>`
-    )
-    .join("");
-}
+  if (Array.isArray(content)) {
+    if (!content.length) return "";
 
-function renderSection(
-  title,
-  value
-) {
-
-  if (!value) {
-    return "";
-  }
-
-  if (Array.isArray(value)) {
-
-    if (!value.length) {
-      return "";
-    }
-
-    return `
-      <section class="study-section">
-        <h3>${escapeHTML(title)}</h3>
-        <ul>
-          ${renderList(value)}
-        </ul>
-      </section>
+    html = `
+      <h3>${escapeHTML(title)}</h3>
+      <ul>
+        ${content
+          .map((item) => `<li>${formatText(item)}</li>`)
+          .join("")}
+      </ul>
+    `;
+  } else {
+    html = `
+      <h3>${escapeHTML(title)}</h3>
+      <p>${formatText(content)}</p>
     `;
   }
 
-  return `
-    <section class="study-section">
-      <h3>${escapeHTML(title)}</h3>
-      <p>
-        ${escapeHTML(value)}
-      </p>
-    </section>
-  `;
+  return html;
 }
 
-function renderSummary(pack) {
-
-  const container =
-    $("summaryContent");
+function renderSummary() {
+  const container = $("summaryContent");
 
   if (!container) return;
 
-  const study =
-    pack.studyMatter || {};
+  if (!state.studyPack) {
+    container.innerHTML = `
+      <div class="empty-state">
+        Generate a study pack to see your study matter.
+      </div>
+    `;
+    return;
+  }
 
-  container.innerHTML = `
+  const s =
+    state.studyPack.studyMatter ||
+    state.studyPack;
 
-    <div class="summary-main">
+  let html = "";
 
-      <h3>Summary</h3>
-
-      <p>
-        ${escapeHTML(
-          pack.summary || ""
-        )}
-      </p>
-
+  html += `
+    <div class="study-level">
+      <strong>Difficulty:</strong>
+      ${escapeHTML(state.difficulty)}
     </div>
-
-    ${renderSection(
-      "Introduction",
-      study.introduction
-    )}
-
-    ${renderSection(
-      "Definition",
-      study.definition
-    )}
-
-    ${renderSection(
-      "Core Concept",
-      study.coreConcept
-    )}
-
-    ${renderSection(
-      "Key Concepts",
-      study.keyConcepts
-    )}
-
-    ${renderSection(
-      "Types / Classification",
-      study.types
-    )}
-
-    ${renderSection(
-      "Components / Elements",
-      study.components
-    )}
-
-    ${renderSection(
-      "Working / Process / Mechanism",
-      study.working
-    )}
-
-    ${renderSection(
-      "Important Characteristics",
-      study.characteristics
-    )}
-
-    ${renderSection(
-      "Examples",
-      study.examples
-    )}
-
-    ${renderSection(
-      "Applications",
-      study.applications
-    )}
-
-    ${renderSection(
-      "Advantages",
-      study.advantages
-    )}
-
-    ${renderSection(
-      "Limitations",
-      study.limitations
-    )}
-
-    ${renderSection(
-      "Comparison",
-      study.comparison
-    )}
-
-    ${renderSection(
-      "Important Exam Points",
-      study.examPoints
-    )}
-
-    ${renderSection(
-      "Quick Revision",
-      study.quickRevision
-    )}
-
   `;
+
+  html += renderSection("Introduction", s.introduction);
+  html += renderSection("Definition", s.definition);
+  html += renderSection("Core Concept", s.coreConcept);
+  html += renderSection("Key Concepts", s.keyConcepts);
+  html += renderSection("Types", s.types);
+  html += renderSection("Components", s.components);
+  html += renderSection("Working", s.working);
+  html += renderSection("Characteristics", s.characteristics);
+  html += renderSection("Examples", s.examples);
+  html += renderSection("Applications", s.applications);
+  html += renderSection("Advantages", s.advantages);
+  html += renderSection("Limitations", s.limitations);
+  html += renderSection("Comparison", s.comparison);
+  html += renderSection(
+    "Important Exam Points",
+    s.importantExamPoints
+  );
+  html += renderSection(
+    "Quick Revision",
+    s.quickRevision
+  );
+
+  container.innerHTML = html;
 }
 
-// ============================================================
-// FLASHCARDS
-// ============================================================
+/* =========================================================
+   FLASHCARDS
+   ========================================================= */
 
 function renderFlashcards() {
-
-  const question =
-    $("cardQuestion");
-
-  const answer =
-    $("cardAnswer");
-
-  const progress =
-    $("cardProgress");
-
-  const card =
-    $("flashcard");
-
-  if (!question || !answer) {
-    return;
-  }
-
-  if (!state.flashcards.length) {
-
-    question.textContent =
-      "Generate a study pack to create flashcards.";
-
-    answer.textContent = "";
-
-    if (progress) {
-      progress.textContent =
-        "0 / 10";
-    }
-
-    return;
-  }
-
-  const item =
-    state.flashcards[
-      state.currentCard
-    ];
-
-  question.textContent =
-    item?.question ||
-    "No question available.";
-
-  answer.textContent =
-    item?.answer ||
-    "No answer available.";
-
-  if (progress) {
-
-    progress.textContent =
-      `${state.currentCard + 1} / 10`;
-  }
-
-  state.cardFlipped = false;
-
-  if (card) {
-    card.classList.remove(
-      "flipped"
-    );
-  }
-}
-
-function flipCard() {
-
-  const card =
-    $("flashcard");
+  const card = $("flashcard");
 
   if (!card) return;
 
-  state.cardFlipped =
-    !state.cardFlipped;
-
-  card.classList.toggle(
-    "flipped",
-    state.cardFlipped
-  );
-}
-
-function nextCard() {
-
   if (!state.flashcards.length) {
+    card.innerHTML = `
+      <div class="empty-state">
+        Generate a study pack to create flashcards.
+      </div>
+    `;
     return;
   }
 
+  const item = state.flashcards[state.currentCard];
+
+  card.innerHTML = `
+    <div
+      class="flashcard-front-content"
+      style="display:${state.cardFlipped ? "none" : "block"}"
+    >
+      <span class="card-label">QUESTION</span>
+
+      <h3>
+        ${escapeHTML(item.question)}
+      </h3>
+
+      <p class="flip-hint">
+        Click the card to reveal the answer
+      </p>
+    </div>
+
+    <div
+      class="flashcard-back-content"
+      style="display:${state.cardFlipped ? "block" : "none"}"
+    >
+      <span class="card-label">ANSWER</span>
+
+      <p>
+        ${formatText(item.answer)}
+      </p>
+
+      <p class="flip-hint">
+        Click the card to return
+      </p>
+    </div>
+  `;
+
+  card.onclick = function () {
+    state.cardFlipped = !state.cardFlipped;
+    renderFlashcards();
+  };
+
+  const progress = $("cardProgress");
+
+  if (progress) {
+    progress.textContent =
+      `${state.currentCard + 1} / ${state.flashcards.length}`;
+  }
+
+  updateConfidenceButtons();
+}
+
+function flipCard() {
+  if (!state.flashcards.length) return;
+
+  state.cardFlipped = !state.cardFlipped;
+  renderFlashcards();
+}
+
+function nextCard() {
+  if (!state.flashcards.length) return;
+
   state.currentCard =
-    (state.currentCard + 1) %
-    state.flashcards.length;
+    (state.currentCard + 1) % state.flashcards.length;
+
+  state.cardFlipped = false;
 
   renderFlashcards();
 }
 
 function prevCard() {
-
-  if (!state.flashcards.length) {
-    return;
-  }
+  if (!state.flashcards.length) return;
 
   state.currentCard =
-    (
-      state.currentCard -
-      1 +
-      state.flashcards.length
-    ) %
+    (state.currentCard - 1 + state.flashcards.length) %
     state.flashcards.length;
+
+  state.cardFlipped = false;
 
   renderFlashcards();
 }
 
-// ============================================================
-// FLASHCARD CONFIDENCE
-// ============================================================
+function setConfidence(level) {
+  if (!state.flashcards.length) return;
 
-function setupConfidenceButtons() {
+  state.confidence[state.currentCard] = level;
 
-  document
-    .querySelectorAll(
-      "[data-confidence]"
-    )
-    .forEach((button) => {
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          const level =
-            button.dataset.confidence;
-
-          state.cardConfidence[
-            state.currentCard
-          ] = level;
-
-          document
-            .querySelectorAll(
-              "[data-confidence]"
-            )
-            .forEach((item) =>
-              item.classList.remove(
-                "selected"
-              )
-            );
-
-          button.classList.add(
-            "selected"
-          );
-        }
-      );
-    });
+  updateConfidenceButtons();
 }
 
-// ============================================================
-// QUIZ
-// ============================================================
+function updateConfidenceButtons() {
+  const buttons =
+    document.querySelectorAll("[data-confidence]");
+
+  buttons.forEach((button) => {
+    button.classList.remove("active");
+
+    const level = button.dataset.confidence;
+
+    if (
+      state.confidence[state.currentCard] === level
+    ) {
+      button.classList.add("active");
+    }
+  });
+}
+
+/* =========================================================
+   QUIZ
+   ========================================================= */
 
 function renderQuiz() {
-
-  const container =
-    $("quizContainer");
+  const container = $("quizContainer");
 
   if (!container) return;
 
   if (!state.quiz.length) {
-
-    container.innerHTML =
-      "<p>Generate a study pack to start the quiz.</p>";
-
+    container.innerHTML = `
+      <div class="empty-state">
+        Generate a study pack to start the quiz.
+      </div>
+    `;
     return;
   }
 
   container.innerHTML = `
-
     <div class="quiz-header">
-      <h3>10-Question Quiz</h3>
-      <div id="quizScore">
-        Answer all 10 questions.
-      </div>
+      <h3>
+        ${escapeHTML(state.difficulty)} Quiz
+      </h3>
+
+      <p>
+        10 questions · 4 options each
+      </p>
     </div>
 
-    ${state.quiz
-      .map(
-        (item, index) => {
-
-          const options =
-            Array.isArray(
-              item.options
-            )
-              ? item.options.slice(
-                  0,
-                  4
-                )
-              : [];
+    <div class="quiz-list">
+      ${state.quiz
+        .map((q, index) => {
+          const options = Array.isArray(q.options)
+            ? q.options
+            : [];
 
           return `
             <div
               class="quiz-question"
-              data-index="${index}"
+              data-question="${index}"
             >
-
-              <h3>
-                ${index + 1}.
-                ${escapeHTML(
-                  item.question
-                )}
-              </h3>
+              <h4>
+                ${index + 1}. ${formatText(q.question)}
+              </h4>
 
               <div class="quiz-options">
-
                 ${options
+                  .slice(0, 4)
                   .map(
-                    (
-                      option,
-                      optionIndex
-                    ) => `
+                    (option, optionIndex) => `
                       <button
                         type="button"
                         class="quiz-option"
                         data-question="${index}"
                         data-option="${optionIndex}"
                       >
-                        ${escapeHTML(
-                          option
-                        )}
+                        ${String.fromCharCode(65 + optionIndex)}.
+                        ${formatText(option)}
                       </button>
                     `
                   )
                   .join("")}
-
               </div>
 
               <div
                 class="quiz-feedback"
-                id="quizFeedback${index}"
+                id="quiz-feedback-${index}"
               ></div>
-
             </div>
           `;
-        }
-      )
-      .join("")}
+        })
+        .join("")}
+    </div>
 
+    <div
+      id="quizScore"
+      class="quiz-score"
+      style="display:none"
+    ></div>
   `;
 
   container
-    .querySelectorAll(
-      ".quiz-option"
-    )
+    .querySelectorAll(".quiz-option")
     .forEach((button) => {
+      button.addEventListener("click", () => {
+        const questionIndex =
+          Number(button.dataset.question);
 
-      button.addEventListener(
-        "click",
-        handleQuizAnswer
-      );
+        const optionIndex =
+          Number(button.dataset.option);
+
+        handleQuizAnswer(
+          questionIndex,
+          optionIndex
+        );
+      });
     });
 }
 
-function handleQuizAnswer(event) {
+function handleQuizAnswer(questionIndex, optionIndex) {
+  const question = state.quiz[questionIndex];
 
-  const button =
-    event.currentTarget;
+  if (!question) return;
 
-  const questionIndex =
-    Number(
-      button.dataset.question
+  const alreadyAnswered =
+    state.quizResults.find(
+      (r) => r.questionIndex === questionIndex
     );
 
-  const selected =
-    Number(
-      button.dataset.option
-    );
+  if (alreadyAnswered) return;
 
-  const question =
-    state.quiz[
-      questionIndex
-    ];
+  const correctAnswer =
+    Number(question.correctAnswer);
 
-  if (!question) {
-    return;
-  }
-
-  const correct =
-    Number(
-      question.correctAnswer
-    );
-
-  const container =
-    button.closest(
-      ".quiz-question"
-    );
-
-  if (!container) {
-    return;
-  }
-
-  if (
-    state.quizResults.some(
-      (item) =>
-        item.questionIndex ===
-        questionIndex
-    )
-  ) {
-    return;
-  }
-
-  const buttons =
-    container.querySelectorAll(
-      ".quiz-option"
-    );
-
-  buttons.forEach(
-    (item) => {
-      item.disabled = true;
-    }
-  );
-
-  if (selected === correct) {
-
-    button.classList.add(
-      "correct"
-    );
-
-  } else {
-
-    button.classList.add(
-      "wrong"
-    );
-
-    buttons.forEach(
-      (item) => {
-
-        if (
-          Number(
-            item.dataset.option
-          ) === correct
-        ) {
-          item.classList.add(
-            "correct"
-          );
-        }
-      }
-    );
-  }
-
-  const feedback =
-    $(
-      `quizFeedback${questionIndex}`
-    );
-
-  if (feedback) {
-
-    feedback.textContent =
-      question.explanation ||
-      "Review this concept once more.";
-  }
+  const isCorrect =
+    optionIndex === correctAnswer;
 
   state.quizResults.push({
-
     questionIndex,
-
-    question:
-      question.question,
-
-    selectedAnswer:
-      question.options?.[
-        selected
-      ] || "",
-
-    correctAnswer:
-      question.options?.[
-        correct
-      ] || "",
-
-    isCorrect:
-      selected === correct
+    selected: optionIndex,
+    correct: correctAnswer,
+    isCorrect
   });
 
-  updateUnderstanding();
-  updateQuizScore();
-}
-
-function updateQuizScore() {
-
-  const score =
-    $("quizScore");
-
-  if (!score) return;
-
-  const answered =
-    state.quizResults.length;
-
-  const correct =
-    state.quizResults.filter(
-      (item) =>
-        item.isCorrect
-    ).length;
-
-  if (answered < 10) {
-
-    score.textContent =
-      `${answered}/10 answered • ${correct} correct`;
-
-    return;
-  }
-
-  const percentage =
-    Math.round(
-      (correct / 10) * 100
+  const questionBox =
+    document.querySelector(
+      `.quiz-question[data-question="${questionIndex}"]`
     );
 
-  score.textContent =
-    `Final Score: ${correct}/10 (${percentage}%)`;
-}
+  if (!questionBox) return;
 
-// ============================================================
-// INSIGHTS
-// ============================================================
+  const buttons =
+    questionBox.querySelectorAll(".quiz-option");
+
+  buttons.forEach((button) => {
+    button.disabled = true;
+
+    const value =
+      Number(button.dataset.option);
+
+    if (value === correctAnswer) {
+      button.classList.add("correct");
+    }
+
+    if (value === optionIndex && !isCorrect) {
+      button.classList.add("wrong");
+    }
+  });
+
+  const feedback =
+    $(`quiz-feedback-${questionIndex}`);
+
+  if (feedback) {
+    feedback.innerHTML = `
+      <strong>
+        ${isCorrect ? "Correct" : "Review this one"}
+      </strong>
+      <p>
+        ${formatText(
+          question.explanation ||
+          "Review the study matter for this question."
+        )}
+      </p>
+    `;
+  }
+
+  state.lastMistake = isCorrect
+    ? state.lastMistake
+    : {
+        question,
+        selected: optionIndex,
+        correct: correctAnswer
+      };
+
+  updateUnderstanding();
+}
 
 function updateUnderstanding() {
+  const total = state.quiz.length || 10;
+  const answered = state.quizResults.length;
+  const correct = state.quizResults.filter(
+    (r) => r.isCorrect
+  ).length;
 
-  const results =
-    state.quizResults;
-
-  if (!results.length) {
-    return;
-  }
-
-  const correct =
-    results.filter(
-      (item) =>
-        item.isCorrect
-    ).length;
-
-  const score =
-    Math.round(
-      (correct /
-        results.length) *
-        100
-    );
-
-  if ($("understandingBar")) {
-    $("understandingBar")
-      .style.width =
-      `${score}%`;
-  }
-
-  if ($("understandingScore")) {
-    $("understandingScore")
-      .textContent =
-      `${score}%`;
-  }
+  const understanding =
+    total ? Math.round((correct / total) * 100) : 0;
 
   const recall =
-    Math.min(
-      100,
-      score + 5
-    );
+    total ? Math.round((answered / total) * 100) : 0;
 
-  const application =
-    Math.max(
-      0,
-      score - 5
-    );
+  const application = understanding;
 
-  if ($("recallBar")) {
-    $("recallBar")
-      .style.width =
-      `${recall}%`;
+  setProgress("understandingBar", understanding);
+  setProgress("recallBar", recall);
+  setProgress("applicationBar", application);
+
+  setText("understandingScore", `${understanding}%`);
+  setText("recallScore", `${recall}%`);
+  setText("applicationScore", `${application}%`);
+
+  if (answered === total) {
+    const scoreBox = $("quizScore");
+
+    if (scoreBox) {
+      scoreBox.style.display = "block";
+
+      scoreBox.innerHTML = `
+        <h3>Quiz completed</h3>
+        <p>
+          You scored
+          <strong>${correct}/${total}</strong>
+        </p>
+        <p>
+          ${Math.round((correct / total) * 100)}%
+          overall score
+        </p>
+      `;
+    }
   }
+}
 
-  if ($("recallScore")) {
-    $("recallScore")
-      .textContent =
-      `${recall}%`;
-  }
+function setProgress(id, value) {
+  const el = $(id);
 
-  if ($("applicationBar")) {
-    $("applicationBar")
-      .style.width =
-      `${application}%`;
-  }
+  if (!el) return;
 
-  if ($("applicationScore")) {
-    $("applicationScore")
-      .textContent =
-      `${application}%`;
+  el.style.width =
+    `${Math.max(0, Math.min(100, value))}%`;
+}
+
+function setText(id, value) {
+  const el = $(id);
+
+  if (el) {
+    el.textContent = value;
   }
 }
 
 function resetInsights() {
+  setProgress("understandingBar", 0);
+  setProgress("recallBar", 0);
+  setProgress("applicationBar", 0);
 
-  [
-    "understandingBar",
-    "recallBar",
-    "applicationBar"
-  ].forEach(
-    (id) => {
-
-      if ($(id)) {
-        $(id).style.width =
-          "0%";
-      }
-    }
-  );
-
-  [
-    "understandingScore",
-    "recallScore",
-    "applicationScore"
-  ].forEach(
-    (id) => {
-
-      if ($(id)) {
-        $(id).textContent =
-          "0%";
-      }
-    }
-  );
+  setText("understandingScore", "0%");
+  setText("recallScore", "0%");
+  setText("applicationScore", "0%");
 
   if ($("weakTopicsContent")) {
-    $("weakTopicsContent").innerHTML =
-      "<p>Complete the quiz to detect weak topics.</p>";
+    $("weakTopicsContent").innerHTML = `
+      <p>Complete the quiz to detect weak topics.</p>
+    `;
   }
 
   if ($("mistakeContent")) {
-    $("mistakeContent").innerHTML =
-      "<p>Answer a quiz question to explain a mistake.</p>";
+    $("mistakeContent").innerHTML = `
+      <p>Answer a question incorrectly to analyse the mistake.</p>
+    `;
   }
 
   if ($("knowledgeMapContent")) {
-    $("knowledgeMapContent").innerHTML =
-      "<p>Complete the quiz to build your knowledge map.</p>";
-  }
-}
-
-// ============================================================
-// WEAK TOPICS + RETEST
-// ============================================================
-
-async function targetedRetest() {
-
-  const output =
-    $("weakTopicsContent");
-
-  if (!output) return;
-
-  if (!state.quizResults.length) {
-
-    output.innerHTML =
-      "<p>Please answer some quiz questions first.</p>";
-
-    return;
-  }
-
-  output.innerHTML =
-    "<p>Analyzing your weak topics and creating a targeted re-test...</p>";
-
-  try {
-
-    const data =
-      await callKnowviaAI({
-
-        task:
-          "weak_topics",
-
-        quizResults:
-          state.quizResults
-
-      });
-
-    const result =
-      extractJSON(data);
-
-    const topics =
-      Array.isArray(
-        result?.weakTopics
-      )
-        ? result.weakTopics
-        : [];
-
-    const retest =
-      Array.isArray(
-        result?.retestQuiz
-      )
-        ? result.retestQuiz
-        : [];
-
-    state.retestQuiz =
-      retest.slice(0, 5);
-
-    output.innerHTML = `
-
-      ${
-        topics.length
-          ? `
-            <h4>Topics to revise</h4>
-
-            <ul>
-              ${topics
-                .map(
-                  (topic) =>
-                    `<li>${escapeHTML(
-                      topic
-                    )}</li>`
-                )
-                .join("")}
-            </ul>
-          `
-          : `
-            <p>
-              No major weak topics detected.
-            </p>
-          `
-      }
-
-      ${
-        result?.explanation
-          ? `
-            <p>
-              ${escapeHTML(
-                result.explanation
-              )}
-            </p>
-          `
-          : ""
-      }
-
-      ${
-        state.retestQuiz.length
-          ? `
-            <h4>Targeted Re-test</h4>
-
-            <div class="retest-quiz">
-
-              ${state.retestQuiz
-                .map(
-                  (
-                    item,
-                    index
-                  ) => `
-                    <div class="quiz-question">
-
-                      <h3>
-                        ${index + 1}.
-                        ${escapeHTML(
-                          item.question
-                        )}
-                      </h3>
-
-                      <div class="quiz-options">
-
-                        ${item.options
-                          .slice(
-                            0,
-                            4
-                          )
-                          .map(
-                            (
-                              option,
-                              optionIndex
-                            ) => `
-                              <button
-                                type="button"
-                                class="quiz-option retest-option"
-                                data-retest="${index}"
-                                data-option="${optionIndex}"
-                              >
-                                ${escapeHTML(
-                                  option
-                                )}
-                              </button>
-                            `
-                          )
-                          .join("")}
-
-                      </div>
-
-                      <div
-                        class="quiz-feedback"
-                        id="retestFeedback${index}"
-                      ></div>
-
-                    </div>
-                  `
-                )
-                .join("")}
-
-            </div>
-          `
-          : ""
-      }
-
+    $("knowledgeMapContent").innerHTML = `
+      <p>Generate a study pack to build your knowledge map.</p>
     `;
-
-    output
-      .querySelectorAll(
-        ".retest-option"
-      )
-      .forEach(
-        (button) => {
-
-          button.addEventListener(
-            "click",
-            handleRetestAnswer
-          );
-
-        }
-      );
-
-  } catch (error) {
-
-    output.innerHTML =
-      `<p>${escapeHTML(
-        error.message
-      )}</p>`;
   }
 }
 
-function handleRetestAnswer(
-  event
-) {
+/* =========================================================
+   WEAK TOPIC DETECTOR
+   ========================================================= */
 
-  const button =
-    event.currentTarget;
-
-  const index =
-    Number(
-      button.dataset.retest
+async function detectWeakTopics() {
+  if (!state.studyPack || !state.quiz.length) {
+    setFeatureOutput(
+      "<p>Generate and attempt the quiz first.</p>"
     );
-
-  const selected =
-    Number(
-      button.dataset.option
-    );
-
-  const item =
-    state.retestQuiz[index];
-
-  if (!item) return;
-
-  const correct =
-    Number(
-      item.correctAnswer
-    );
-
-  const container =
-    button.closest(
-      ".quiz-question"
-    );
-
-  if (!container) return;
-
-  const buttons =
-    container.querySelectorAll(
-      ".retest-option"
-    );
-
-  buttons.forEach(
-    (item) => {
-      item.disabled = true;
-    }
-  );
-
-  if (selected === correct) {
-
-    button.classList.add(
-      "correct"
-    );
-
-  } else {
-
-    button.classList.add(
-      "wrong"
-    );
-
-    buttons.forEach(
-      (item) => {
-
-        if (
-          Number(
-            item.dataset.option
-          ) === correct
-        ) {
-          item.classList.add(
-            "correct"
-          );
-        }
-      }
-    );
-  }
-
-  const feedback =
-    $(
-      `retestFeedback${index}`
-    );
-
-  if (feedback) {
-
-    feedback.textContent =
-      item.explanation ||
-      "Review this concept again.";
-  }
-}
-
-// ============================================================
-// EXPLAIN MISTAKE
-// ============================================================
-
-async function explainMistake() {
-
-  const output =
-    $("mistakeContent");
-
-  if (!output) return;
-
-  const mistake =
-    [...state.quizResults]
-      .reverse()
-      .find(
-        (item) =>
-          !item.isCorrect
-      );
-
-  if (!mistake) {
-
-    output.innerHTML =
-      "<p>No incorrect answer found yet.</p>";
-
     return;
   }
 
-  output.innerHTML =
-    "<p>Explaining your mistake...</p>";
+  const wrongQuestions = state.quizResults
+    .filter((r) => !r.isCorrect)
+    .map((r) => {
+      const q = state.quiz[r.questionIndex];
 
-  try {
+      return {
+        question: q.question,
+        selectedAnswer: q.options?.[r.selected],
+        correctAnswer: q.options?.[r.correct]
+      };
+    });
 
-    const data =
-      await callKnowviaAI({
-
-        task:
-          "explain_mistake",
-
-        question:
-          mistake.question,
-
-        studentAnswer:
-          mistake.selectedAnswer,
-
-        correctAnswer:
-          mistake.correctAnswer
-
-      });
-
-    output.innerHTML = `
+  if (!wrongQuestions.length) {
+    $("weakTopicsContent").innerHTML = `
       <p>
-        ${escapeHTML(
-          extractTextResponse(data)
-        ).replace(
-          /\n/g,
-          "<br>"
-        )}
+        Great! No weak topics were detected from your answered questions.
       </p>
     `;
 
-  } catch (error) {
-
-    output.innerHTML =
-      `<p>${escapeHTML(
-        error.message
-      )}</p>`;
-  }
-}
-
-// ============================================================
-// KNOWLEDGE MAP
-// ============================================================
-
-async function generateKnowledgeMap() {
-
-  const output =
-    $("knowledgeMapContent");
-
-  if (!output) return;
-
-  if (!state.quizResults.length) {
-
-    output.innerHTML =
-      "<p>Complete the quiz first.</p>";
-
     return;
   }
 
-  output.innerHTML =
-    "<p>Building your knowledge map...</p>";
+  const content = $("weakTopicsContent");
+
+  if (content) {
+    content.innerHTML =
+      "<p>Analysing your incorrect answers...</p>";
+  }
 
   try {
+    const data = await api("weak_topics", {
+      material: buildStudyMaterialText(),
+      wrongQuestions
+    });
 
-    const data =
-      await callKnowviaAI({
-
-        task:
-          "knowledge_map",
-
-        quizResults:
-          state.quizResults
-
-      });
-
-    const result =
-      extractJSON(data);
-
-    const nodes =
-      Array.isArray(
-        result?.nodes
-      )
-        ? result.nodes
+    state.weakTopics =
+      Array.isArray(data.result?.weakTopics)
+        ? data.result.weakTopics
         : [];
 
-    if (!nodes.length) {
+    if (!content) return;
 
-      output.innerHTML =
-        "<p>No knowledge map data was returned.</p>";
-
+    if (!state.weakTopics.length) {
+      content.innerHTML =
+        "<p>No clear weak topics detected.</p>";
       return;
     }
 
-    output.innerHTML = `
-
-      <div class="knowledge-map-list">
-
-        ${nodes
-          .map(
-            (node) => `
-              <div class="knowledge-node">
-
-                <strong>
-                  ${escapeHTML(
-                    node.topic
-                  )}
-                </strong>
-
-                <span>
-                  ${escapeHTML(
-                    node.status
-                  )}
-                </span>
-
-                <p>
-                  ${escapeHTML(
-                    node.reason
-                  )}
-                </p>
-
-              </div>
-            `
-          )
+    content.innerHTML = `
+      <ul>
+        ${state.weakTopics
+          .map((topic) => `
+            <li>
+              <strong>${escapeHTML(topic.topic || topic)}</strong>
+              ${
+                topic.reason
+                  ? `<br>${formatText(topic.reason)}`
+                  : ""
+              }
+            </li>
+          `)
           .join("")}
-
-      </div>
-
+      </ul>
     `;
 
   } catch (error) {
-
-    output.innerHTML =
-      `<p>${escapeHTML(
-        error.message
-      )}</p>`;
-  }
-}
-
-// ============================================================
-// EXTRA AI FEATURES
-// ============================================================
-
-async function runFeature(
-  task,
-  title
-) {
-
-  const output =
-    $("featureOutput");
-
-  if (!output) return;
-
-  const topic =
-    $("topic")?.value?.trim() ||
-    state.studyPack?.topic ||
-    "the current study topic";
-
-  const material =
-    state.material ||
-    getCurrentMaterial() ||
-    JSON.stringify(
-      state.studyPack?.studyMatter ||
-      {}
-    );
-
-  output.innerHTML = `
-    <h3>
-      ${escapeHTML(title)}
-    </h3>
-
-    <p>
-      Thinking...
-    </p>
-  `;
-
-  try {
-
-    const data =
-      await callKnowviaAI({
-
-        task,
-
-        topic,
-
-        material,
-
-        difficulty:
-          state.difficulty
-
-      });
-
-    const answer =
-      extractTextResponse(data);
-
-    output.innerHTML = `
-      <h3>
-        ${escapeHTML(title)}
-      </h3>
-
-      <div class="feature-answer">
-        ${escapeHTML(answer)
-          .replace(
-            /\n/g,
-            "<br>"
-          )}
-      </div>
-    `;
-
-    output.scrollIntoView({
-      behavior: "smooth",
-      block: "center"
-    });
-
-  } catch (error) {
-
-    output.innerHTML =
-      `<p>${escapeHTML(
-        error.message
-      )}</p>`;
-  }
-}
-
-// ============================================================
-// ASK MY NOTES
-// ============================================================
-
-async function askMyNotes() {
-
-  const question =
-    window.prompt(
-      "What do you want to ask about your notes?"
-    );
-
-  if (!question) {
-    return;
-  }
-
-  const material =
-    state.material ||
-    getCurrentMaterial();
-
-  if (!material) {
-
-    const output =
-      $("featureOutput");
-
-    if (output) {
-      output.innerHTML =
-        "<p>Please provide notes first.</p>";
-    }
-
-    return;
-  }
-
-  const output =
-    $("featureOutput");
-
-  if (!output) return;
-
-  output.innerHTML =
-    "<p>Searching your notes...</p>";
-
-  try {
-
-    const data =
-      await callKnowviaAI({
-
-        task:
-          "ask_notes",
-
-        question,
-
-        material
-
-      });
-
-    output.innerHTML = `
-
-      <h3>
-        Ask My Notes
-      </h3>
-
-      <div class="feature-answer">
-        ${escapeHTML(
-          extractTextResponse(data)
-        ).replace(
-          /\n/g,
-          "<br>"
-        )}
-      </div>
-
-    `;
-
-  } catch (error) {
-
-    output.innerHTML =
-      `<p>${escapeHTML(
-        error.message
-      )}</p>`;
-  }
-}
-
-// ============================================================
-// HANDWRITTEN OCR
-// ============================================================
-
-async function processHandwrittenImage(
-  file
-) {
-
-  const status =
-    $("handwrittenStatus");
-
-  if (!file) return;
-
-  if (!window.Tesseract) {
-
-    showMessage(
-      status,
-      "OCR library is not available."
-    );
-
-    return;
-  }
-
-  showMessage(
-    status,
-    "Reading handwriting... Please wait."
-  );
-
-  try {
-
-    const result =
-      await Tesseract.recognize(
-        file,
-        "eng",
-        {
-          logger: (info) => {
-
-            if (
-              info.status ===
-              "recognizing text"
-            ) {
-
-              const percent =
-                Math.round(
-                  (info.progress || 0) *
-                    100
-                );
-
-              showMessage(
-                status,
-                `Reading handwriting... ${percent}%`
-              );
-            }
-          }
-        }
-      );
-
-    const text =
-      result?.data?.text?.trim() ||
-      "";
-
-    if ($("handwrittenInput")) {
-
-      $("handwrittenInput")
-        .value = text;
-    }
-
-    state.material =
-      text;
-
-    showMessage(
-      status,
-      text
-        ? "Handwritten notes extracted successfully."
-        : "No readable text found."
-    );
-
-  } catch (error) {
-
     console.error(error);
 
-    showMessage(
-      status,
-      "Could not read the handwritten image."
-    );
+    if (content) {
+      content.innerHTML =
+        `<p>${escapeHTML(error.message)}</p>`;
+    }
   }
 }
 
-// ============================================================
-// PDF
-// ============================================================
+/* =========================================================
+   TARGETED RETEST
+   ========================================================= */
 
-async function extractPDFText(
-  file
-) {
-
-  const status =
-    $("pdfStatus");
-
-  if (!file) return;
-
-  if (!window.pdfjsLib) {
-
-    showMessage(
-      status,
-      "PDF library is not available."
+async function targetedRetest() {
+  if (!state.studyPack) {
+    setFeatureOutput(
+      "<p>Generate a study pack first.</p>"
     );
-
     return;
   }
 
-  showMessage(
-    status,
-    "Reading PDF..."
+  if (!state.weakTopics.length) {
+    await detectWeakTopics();
+  }
+
+  const topics =
+    state.weakTopics.length
+      ? state.weakTopics
+          .map((x) => x.topic || x)
+          .join(", ")
+      : "the concepts you answered incorrectly";
+
+  setFeatureOutput(`
+    <div class="feature-card">
+      <h3>Targeted Re-test</h3>
+      <p>Generating questions focused on: ${escapeHTML(topics)}</p>
+    </div>
+  `);
+
+  try {
+    const data = await api("quiz", {
+      material: buildStudyMaterialText(),
+      focusTopics: topics,
+      count: 10
+    });
+
+    const questions = Array.isArray(data.result)
+      ? data.result
+      : data.result?.quiz;
+
+    if (!Array.isArray(questions) || !questions.length) {
+      throw new Error("No re-test questions were returned.");
+    }
+
+    state.quiz = questions.slice(0, 10);
+    state.quizResults = [];
+    state.lastMistake = null;
+
+    renderQuiz();
+
+    document
+      .getElementById("quizContainer")
+      ?.scrollIntoView({ behavior: "smooth" });
+
+    setFeatureOutput(`
+      <div class="feature-card">
+        <h3>Targeted Re-test ready</h3>
+        <p>
+          The new quiz focuses on the concepts you need to practise.
+        </p>
+      </div>
+    `);
+
+  } catch (error) {
+    console.error(error);
+
+    setFeatureOutput(`
+      <div class="feature-card error">
+        ${escapeHTML(error.message)}
+      </div>
+    `);
+  }
+}
+
+/* =========================================================
+   EXPLAIN MY MISTAKE
+   ========================================================= */
+
+async function explainMistake() {
+  if (!state.lastMistake) {
+    setFeatureOutput(`
+      <div class="feature-card">
+        <h3>Explain My Mistake</h3>
+        <p>Answer a quiz question incorrectly first.</p>
+      </div>
+    `);
+    return;
+  }
+
+  const mistake = state.lastMistake;
+
+  setFeatureOutput(
+    "<p>Analysing your mistake...</p>"
   );
 
   try {
+    const data = await api("explain_mistake", {
+      material: buildStudyMaterialText(),
+      question: mistake.question.question,
+      selectedAnswer:
+        mistake.question.options?.[mistake.selected],
+      correctAnswer:
+        mistake.question.options?.[mistake.correct]
+    });
 
-    const buffer =
+    setFeatureOutput(`
+      <div class="feature-card">
+        <h3>Why you made this mistake</h3>
+        <div>
+          ${formatText(data.answer || "No explanation returned.")}
+        </div>
+      </div>
+    `);
+
+  } catch (error) {
+    setFeatureOutput(`
+      <div class="feature-card error">
+        ${escapeHTML(error.message)}
+      </div>
+    `);
+  }
+}
+
+/* =========================================================
+   KNOWLEDGE MAP
+   ========================================================= */
+
+async function generateKnowledgeMap() {
+  if (!state.studyPack) {
+    setFeatureOutput(
+      "<p>Generate a study pack first.</p>"
+    );
+    return;
+  }
+
+  const container = $("knowledgeMapContent");
+
+  if (container) {
+    container.innerHTML =
+      "<p>Building your knowledge map...</p>";
+  }
+
+  try {
+    const data = await api("knowledge_map", {
+      material: buildStudyMaterialText()
+    });
+
+    const map =
+      data.result?.map ||
+      data.result?.knowledgeMap ||
+      data.result;
+
+    if (!container) return;
+
+    if (typeof map === "string") {
+      container.innerHTML = `
+        <div class="knowledge-map-text">
+          ${formatText(map)}
+        </div>
+      `;
+      return;
+    }
+
+    if (Array.isArray(map)) {
+      container.innerHTML = `
+        <ul>
+          ${map
+            .map((item) => `
+              <li>${formatText(
+                typeof item === "string"
+                  ? item
+                  : item.topic || JSON.stringify(item)
+              )}</li>
+            `)
+            .join("")}
+        </ul>
+      `;
+      return;
+    }
+
+    container.innerHTML = `
+      <pre>${escapeHTML(JSON.stringify(map, null, 2))}</pre>
+    `;
+
+  } catch (error) {
+    if (container) {
+      container.innerHTML =
+        `<p>${escapeHTML(error.message)}</p>`;
+    }
+  }
+}
+
+/* =========================================================
+   TEACH ME / STUDY SESSION / EXAM MODE
+   ========================================================= */
+
+async function runFeature(feature) {
+  if (!state.studyPack) {
+    setFeatureOutput(`
+      <div class="feature-card">
+        <h3>Generate a study pack first</h3>
+        <p>This feature uses your generated study matter.</p>
+      </div>
+    `);
+    return;
+  }
+
+  const names = {
+    teach: "Teach Me",
+    study_session: "Study Session",
+    exam: "Exam Mode"
+  };
+
+  setFeatureOutput(`
+    <div class="feature-card">
+      <h3>${names[feature] || "Loading"}</h3>
+      <p>Preparing your personalised learning activity...</p>
+    </div>
+  `);
+
+  try {
+    const data = await api(feature, {
+      material: buildStudyMaterialText()
+    });
+
+    setFeatureOutput(`
+      <div class="feature-card">
+        <h3>${escapeHTML(names[feature] || feature)}</h3>
+        <div>
+          ${formatText(data.answer || "No content returned.")}
+        </div>
+      </div>
+    `);
+
+  } catch (error) {
+    console.error(error);
+
+    setFeatureOutput(`
+      <div class="feature-card error">
+        ${escapeHTML(error.message)}
+      </div>
+    `);
+  }
+}
+
+/* =========================================================
+   ASK MY NOTES
+   ========================================================= */
+
+async function askMyNotes() {
+  const material = getCurrentMaterial();
+
+  if (!material && !state.studyPack) {
+    setFeatureOutput(`
+      <div class="feature-card">
+        <h3>Ask My Notes</h3>
+        <p>Add typed, handwritten, PDF or topic material first.</p>
+      </div>
+    `);
+    return;
+  }
+
+  const question = window.prompt(
+    "What do you want to ask about your notes?"
+  );
+
+  if (!question || !question.trim()) {
+    return;
+  }
+
+  setFeatureOutput(
+    "<p>Searching your study material...</p>"
+  );
+
+  try {
+    const data = await api("ask_notes", {
+      material:
+        state.studyPack
+          ? buildStudyMaterialText()
+          : material,
+      question: question.trim()
+    });
+
+    setFeatureOutput(`
+      <div class="feature-card">
+        <h3>Your Notes Answer</h3>
+        <p>
+          <strong>Question:</strong>
+          ${escapeHTML(question)}
+        </p>
+        <div>
+          ${formatText(data.answer || "No answer returned.")}
+        </div>
+      </div>
+    `);
+
+  } catch (error) {
+    setFeatureOutput(`
+      <div class="feature-card error">
+        ${escapeHTML(error.message)}
+      </div>
+    `);
+  }
+}
+
+/* =========================================================
+   HANDWRITTEN NOTES OCR
+   ========================================================= */
+
+async function processHandwrittenImage(file) {
+  if (!file) return;
+
+  const status = $("handwrittenStatus");
+
+  if (status) {
+    status.textContent =
+      "Reading handwriting... This may take a little time.";
+  }
+
+  try {
+    if (!window.Tesseract) {
+      throw new Error(
+        "OCR library is not available."
+      );
+    }
+
+    const result = await Tesseract.recognize(
+      file,
+      "eng",
+      {
+        logger: (info) => {
+          if (
+            info.status === "recognizing text" &&
+            status
+          ) {
+            status.textContent =
+              `Reading handwriting... ${Math.round(
+                (info.progress || 0) * 100
+              )}%`;
+          }
+        }
+      }
+    );
+
+    const text =
+      result?.data?.text?.trim() || "";
+
+    const input = $("handwrittenInput");
+
+    if (input) {
+      input.value = text;
+    }
+
+    if (status) {
+      status.textContent = text
+        ? "Handwritten notes extracted successfully."
+        : "No readable text was detected.";
+    }
+
+  } catch (error) {
+    console.error(error);
+
+    if (status) {
+      status.textContent =
+        error.message || "Could not read the image.";
+    }
+  }
+}
+
+function setupHandwritingOCR() {
+  const possibleInputs = [
+    "handwrittenFile",
+    "handwrittenImage",
+    "handwrittenUpload"
+  ];
+
+  for (const id of possibleInputs) {
+    const input = $(id);
+
+    if (!input) continue;
+
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+
+      if (file) {
+        processHandwrittenImage(file);
+      }
+    });
+  }
+}
+
+/* =========================================================
+   PDF TEXT EXTRACTION
+   ========================================================= */
+
+async function extractPDF(file) {
+  const status = $("pdfStatus");
+
+  if (!file) return;
+
+  if (status) {
+    status.textContent =
+      "Reading PDF...";
+  }
+
+  try {
+    if (!window.pdfjsLib) {
+      throw new Error(
+        "PDF reader library is not available."
+      );
+    }
+
+    const arrayBuffer =
       await file.arrayBuffer();
 
     const pdf =
-      await pdfjsLib
-        .getDocument({
-          data: buffer
-        })
-        .promise;
+      await pdfjsLib.getDocument({
+        data: arrayBuffer
+      }).promise;
 
     let fullText = "";
 
-    for (
-      let pageNumber = 1;
-      pageNumber <=
-      pdf.numPages;
-      pageNumber++
-    ) {
-
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
       const page =
-        await pdf.getPage(
-          pageNumber
-        );
+        await pdf.getPage(pageNumber);
 
       const content =
         await page.getTextContent();
 
       const pageText =
         content.items
-          .map(
-            (item) =>
-              item.str
-          )
+          .map((item) => item.str)
           .join(" ");
 
       fullText +=
         `\n\nPage ${pageNumber}\n${pageText}`;
     }
 
-    fullText =
-      fullText.trim();
-
-    state.material =
-      fullText;
+    fullText = fullText.trim();
 
     if (!fullText) {
-
-      showMessage(
-        status,
-        "This PDF has no selectable text. Scanned PDF OCR needs to be added separately."
+      throw new Error(
+        "This PDF appears to be scanned/image-based. Selectable PDF text could not be extracted."
       );
-
-      return;
     }
 
-    showMessage(
-      status,
-      `PDF extracted successfully (${pdf.numPages} pages).`
-    );
+    state.material = fullText;
+
+    if (status) {
+      status.textContent =
+        `PDF extracted successfully (${pdf.numPages} page${pdf.numPages === 1 ? "" : "s"}).`;
+    }
 
   } catch (error) {
-
     console.error(error);
 
-    showMessage(
-      status,
-      "Could not read this PDF."
-    );
+    if (status) {
+      status.textContent =
+        error.message || "Could not read the PDF.";
+    }
   }
 }
 
-// ============================================================
-// DARK MODE
-// ============================================================
+function setupPDF() {
+  const input = $("pdfInput");
+
+  if (!input) return;
+
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+
+    if (file) {
+      extractPDF(file);
+    }
+  });
+}
+
+/* =========================================================
+   THEME
+   ========================================================= */
 
 function setupTheme() {
-
-  const button =
-    $("themeBtn");
+  const button = $("themeBtn");
 
   if (!button) return;
 
-  button.addEventListener(
+  button.addEventListener("click", () => {
+    document.body.classList.toggle("dark-mode");
+
+    const dark =
+      document.body.classList.contains("dark-mode");
+
+    button.textContent =
+      dark ? "☀️" : "🌙";
+  });
+}
+
+/* =========================================================
+   NAVIGATION
+   ========================================================= */
+
+function setupNavigation() {
+  document.querySelectorAll("a[href^='#']").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      const targetId =
+        link.getAttribute("href");
+
+      if (!targetId || targetId === "#") return;
+
+      const target =
+        document.querySelector(targetId);
+
+      if (target) {
+        event.preventDefault();
+
+        target.scrollIntoView({
+          behavior: "smooth"
+        });
+      }
+    });
+  });
+}
+
+/* =========================================================
+   BUTTONS
+   ========================================================= */
+
+function setupButtons() {
+  $("generateBtn")?.addEventListener(
     "click",
-    () => {
+    generateStudyPack
+  );
 
-      document.body.classList.toggle(
-        "dark"
-      );
+  $("flipCard")?.addEventListener(
+    "click",
+    flipCard
+  );
 
-      const dark =
-        document.body.classList.contains(
-          "dark"
+  $("nextCard")?.addEventListener(
+    "click",
+    nextCard
+  );
+
+  $("prevCard")?.addEventListener(
+    "click",
+    prevCard
+  );
+
+  document
+    .querySelectorAll("[data-confidence]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        setConfidence(
+          button.dataset.confidence
         );
+      });
+    });
 
-      button.textContent =
-        dark ? "☀️" : "🌙";
-    }
+  $("weakTopicsBtn")?.addEventListener(
+    "click",
+    detectWeakTopics
+  );
+
+  $("explainMistakeBtn")?.addEventListener(
+    "click",
+    explainMistake
+  );
+
+  $("knowledgeMapBtn")?.addEventListener(
+    "click",
+    generateKnowledgeMap
+  );
+
+  $("teachBtn")?.addEventListener(
+    "click",
+    () => runFeature("teach")
+  );
+
+  $("studySessionBtn")?.addEventListener(
+    "click",
+    () => runFeature("study_session")
+  );
+
+  $("examModeBtn")?.addEventListener(
+    "click",
+    () => runFeature("exam")
+  );
+
+  $("askNotesBtn")?.addEventListener(
+    "click",
+    askMyNotes
   );
 }
 
-// ============================================================
-// EVENTS
-// ============================================================
+/* =========================================================
+   INITIALIZATION
+   ========================================================= */
 
-function setupEvents() {
-
-  $("generateBtn")
-    ?.addEventListener(
-      "click",
-      generateStudyPack
-    );
-
-  $("flipCard")
-    ?.addEventListener(
-      "click",
-      flipCard
-    );
-
-  $("nextCard")
-    ?.addEventListener(
-      "click",
-      nextCard
-    );
-
-  $("prevCard")
-    ?.addEventListener(
-      "click",
-      prevCard
-    );
-
-  $("weakTopicsBtn")
-    ?.addEventListener(
-      "click",
-      targetedRetest
-    );
-
-  $("explainMistakeBtn")
-    ?.addEventListener(
-      "click",
-      explainMistake
-    );
-
-  $("knowledgeMapBtn")
-    ?.addEventListener(
-      "click",
-      generateKnowledgeMap
-    );
-
-  $("teachBtn")
-    ?.addEventListener(
-      "click",
-      () =>
-        runFeature(
-          "teach",
-          "Teach Me"
-        )
-    );
-
-  $("studySessionBtn")
-    ?.addEventListener(
-      "click",
-      () =>
-        runFeature(
-          "study_session",
-          "Study Session"
-        )
-    );
-
-  $("examModeBtn")
-    ?.addEventListener(
-      "click",
-      () =>
-        runFeature(
-          "exam",
-          "Exam Mode"
-        )
-    );
-
-  $("askNotesBtn")
-    ?.addEventListener(
-      "click",
-      askMyNotes
-    );
-
-  $("handwrittenInput")
-    ?.addEventListener(
-      "change",
-      (event) => {
-
-        const file =
-          event.target.files?.[0];
-
-        processHandwrittenImage(
-          file
-        );
-      }
-    );
-
-  $("pdfInput")
-    ?.addEventListener(
-      "change",
-      (event) => {
-
-        const file =
-          event.target.files?.[0];
-
-        extractPDFText(file);
-      }
-    );
-}
-
-// ============================================================
-// NAVIGATION
-// ============================================================
-
-function setupNavigation() {
+document.addEventListener("DOMContentLoaded", () => {
+  setupSourceTabs();
+  setupButtons();
+  setupTheme();
+  setupNavigation();
+  setupHandwritingOCR();
+  setupPDF();
 
   document
-    .querySelectorAll(
-      'a[href^="#"]'
-    )
-    .forEach((link) => {
-
-      link.addEventListener(
-        "click",
-        (event) => {
-
-          const target =
-            document.querySelector(
-              link.getAttribute(
-                "href"
-              )
-            );
-
-          if (!target) {
-            return;
-          }
-
-          event.preventDefault();
-
-          target.scrollIntoView({
-            behavior: "smooth"
-          });
-        }
-      );
+    .querySelectorAll(".source-panel")
+    .forEach((panel) => {
+      panel.style.display = "none";
     });
-}
 
-// ============================================================
-// START
-// ============================================================
+  const topicPanel = $("topicPanel");
 
-document.addEventListener(
-  "DOMContentLoaded",
-  () => {
-
-    setupSourceTabs();
-    setupTheme();
-    setupEvents();
-    setupNavigation();
-    setupConfidenceButtons();
-
-    renderFlashcards();
-    resetInsights();
-
+  if (topicPanel) {
+    topicPanel.style.display = "block";
   }
-);
+
+  const firstTab =
+    document.querySelector(
+      '.source-tab[data-source="topic"]'
+    );
+
+  if (firstTab) {
+    firstTab.classList.add("active");
+  }
+
+  renderSummary();
+  renderFlashcards();
+  renderQuiz();
+  resetInsights();
+});
