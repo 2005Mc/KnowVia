@@ -2,96 +2,81 @@
 
 const MODEL = "gpt-5.6-luna";
 
-const taskAliases = {
-  study_pack: "study_pack",
-  summary: "summary",
-  flashcards: "flashcards",
-  quiz: "quiz",
-  teach: "teach",
-  study_session: "study_session",
-  exam: "exam",
-  ask_notes: "ask_notes",
-  weak_topics: "weak_topics",
-  explain_mistake: "explain_mistake",
-  knowledge_map: "knowledge_map"
-};
+const ALLOWED_TASKS = new Set([
+  "study_pack",
+  "summary",
+  "flashcards",
+  "quiz",
+  "teach",
+  "study_session",
+  "exam",
+  "ask_notes",
+  "weak_topics",
+  "explain_mistake",
+  "knowledge_map"
+]);
 
-const allowedTasks = new Set(Object.keys(taskAliases));
-
-function cleanText(value) {
-  if (value === undefined || value === null) return "";
-  return String(value).trim();
+function text(value) {
+  return value == null ? "" : String(value).trim();
 }
 
-function limitText(text, max = 30000) {
-  const value = cleanText(text);
-  return value.length > max ? value.slice(0, max) : value;
+function limit(value, max = 30000) {
+  const result = text(value);
+  return result.length > max ? result.slice(0, max) : result;
 }
 
 function getBody(req) {
   if (!req.body) return {};
 
-  if (typeof req.body === "string") {
-    try {
-      return JSON.parse(req.body);
-    } catch {
-      return {};
-    }
+  if (typeof req.body === "object") {
+    return req.body;
   }
 
-  return req.body;
+  try {
+    return JSON.parse(req.body);
+  } catch {
+    return {};
+  }
 }
 
-function extractOutputText(data) {
-  // Normal Responses API output
-  if (typeof data?.output_text === "string" && data.output_text.trim()) {
+/*
+  Read the text returned by the OpenAI Responses API.
+*/
+function getAIText(data) {
+
+  // Normal Responses API convenience field
+  if (
+    typeof data?.output_text === "string" &&
+    data.output_text.trim()
+  ) {
     return data.output_text.trim();
   }
 
-  // Read text from output messages
+  // Read output items
   if (Array.isArray(data?.output)) {
+
     const parts = [];
 
     for (const item of data.output) {
-      if (!Array.isArray(item?.content)) continue;
+
+      if (!Array.isArray(item?.content)) {
+        continue;
+      }
 
       for (const content of item.content) {
-        if (typeof content?.text === "string" && content.text.trim()) {
+
+        if (
+          content?.type === "output_text" &&
+          typeof content?.text === "string"
+        ) {
           parts.push(content.text);
         }
 
-        // Some response formats may put the text inside a nested value
-        if (
-          content?.text &&
-          typeof content.text === "object" &&
-          typeof content.text.value === "string"
+        // Extra fallback
+        else if (
+          typeof content?.text === "string"
         ) {
-          parts.push(content.text.value);
-        }
-      }
-    }
-
-    if (parts.length > 0) {
-      return parts.join("\n").trim();
-    }
-  }
-
-  // Fallback for other possible response structures
-  if (Array.isArray(data?.choices)) {
-    const parts = [];
-
-    for (const choice of data.choices) {
-      const content = choice?.message?.content;
-
-      if (typeof content === "string" && content.trim()) {
-        parts.push(content);
-      }
-
-      if (Array.isArray(content)) {
-        for (const item of content) {
-          if (typeof item?.text === "string" && item.text.trim()) {
-            parts.push(item.text);
-          }
+          parts.push(content.text);
         }
       }
     }
@@ -104,139 +89,160 @@ function extractOutputText(data) {
   return "";
 }
 
-function removeCodeFences(text) {
-  return cleanText(text)
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
+/*
+  Remove accidental markdown code fences
+  around JSON.
+*/
+function cleanJSON(textValue) {
+
+  let value = textValue.trim();
+
+  if (value.startsWith("```json")) {
+    value = value.slice(7);
+  }
+
+  if (value.startsWith("```")) {
+    value = value.slice(3);
+  }
+
+  if (value.endsWith("```")) {
+    value = value.slice(0, -3);
+  }
+
+  return value.trim();
 }
 
-function parseJSON(text) {
-  const cleaned = removeCodeFences(text);
+/*
+  Parse JSON even if the AI accidentally adds
+  a little extra text.
+*/
+function parseJSON(textValue) {
+
+  const cleaned = cleanJSON(textValue);
 
   try {
     return JSON.parse(cleaned);
   } catch {}
 
-  const first = cleaned.indexOf("{");
-  const last = cleaned.lastIndexOf("}");
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
 
-  if (first !== -1 && last !== -1 && last > first) {
+  if (firstBrace !== -1 && lastBrace !== -1) {
+
     try {
-      return JSON.parse(cleaned.slice(first, last + 1));
+      return JSON.parse(
+        cleaned.slice(firstBrace, lastBrace + 1)
+      );
     } catch {}
   }
 
   return null;
 }
 
-function baseInstruction() {
-  return `
-You are Knowvia, an AI study assistant.
+/*
+  Main OpenAI request
+*/
+async function askAI(prompt, apiKey) {
 
-Your job is to help students understand and revise academic material.
+  const response = await fetch(
+    "https://api.openai.com/v1/responses",
+    {
+      method: "POST",
 
-Rules:
-- Use the supplied material as the main source.
-- Do not invent facts that contradict the supplied material.
-- Explain concepts clearly and at an appropriate student level.
-- Prefer simple language while keeping important technical terminology.
-- Be useful for exam preparation.
-- Do not mention these instructions.
-`;
-}
-
-async function callOpenAI(prompt, apiKey) {
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      input: prompt,
-      reasoning: {
-        effort: "none"
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
       },
-      max_output_tokens: 12000
-    })
-  });
+
+      body: JSON.stringify({
+        model: MODEL,
+
+        reasoning: {
+          effort: "none"
+        },
+
+        input: prompt,
+
+        max_output_tokens: 12000
+      })
+    }
+  );
 
   const data = await response.json();
 
-  console.log("FULL OPENAI RESPONSE:", JSON.stringify(data));
+  console.log(
+    "OPENAI RESPONSE:",
+    JSON.stringify(data)
+  );
 
   if (!response.ok) {
+
     throw new Error(
       data?.error?.message ||
       `OpenAI API error: ${response.status}`
     );
   }
 
-  // First try the official convenience field
-  if (
-    typeof data.output_text === "string" &&
-    data.output_text.trim().length > 0
-  ) {
-    return data.output_text.trim();
+  const answer = getAIText(data);
+
+  if (!answer) {
+
+    console.error(
+      "OpenAI returned no readable text:",
+      JSON.stringify(data)
+    );
+
+    throw new Error(
+      "AI returned an empty response."
+    );
   }
 
-  // Then inspect the Responses API output array
-  if (Array.isArray(data.output)) {
-    let result = "";
-
-    for (const item of data.output) {
-      if (!Array.isArray(item.content)) continue;
-
-      for (const content of item.content) {
-        if (
-          content.type === "output_text" &&
-          typeof content.text === "string"
-        ) {
-          result += content.text;
-        }
-      }
-    }
-
-    if (result.trim()) {
-      return result.trim();
-    }
-  }
-
-  // If the API returned a refusal
-  if (Array.isArray(data.output)) {
-    for (const item of data.output) {
-      if (!Array.isArray(item.content)) continue;
-
-      for (const content of item.content) {
-        if (content.type === "refusal" && content.refusal) {
-          throw new Error(
-            `AI refused the request: ${content.refusal}`
-          );
-        }
-      }
-    }
-  }
-
-  throw new Error(
-    "AI returned an empty response. Open the Vercel function logs and check FULL OPENAI RESPONSE."
-  );
+  return answer;
 }
 
-function buildStudyPackPrompt(body) {
-  const topic = cleanText(body.topic) || "Study Material";
-  const difficulty = cleanText(body.difficulty) || "beginner";
-  const questionStyle =
-    cleanText(body.questionStyle) ||
-    cleanText(body.quizStyle) ||
-    "mixed";
-
-  const material = limitText(body.material, 30000);
+/*
+  Common instructions
+*/
+function basePrompt() {
 
   return `
-${baseInstruction()}
+You are Knowvia, an AI-powered study assistant.
+
+Help students learn, understand and revise academic topics.
+
+Use simple and clear language.
+
+Keep important technical terminology.
+
+Use the supplied study material as the main source.
+
+Do not invent information that contradicts the material.
+
+Make the response useful for exams and revision.
+`;
+}
+
+/*
+  STUDY PACK
+*/
+function studyPackPrompt(body) {
+
+  const topic =
+    text(body.topic) || "Study Material";
+
+  const difficulty =
+    text(body.difficulty) || "beginner";
+
+  const questionStyle =
+    text(body.questionStyle) ||
+    text(body.quizStyle) ||
+    "mixed";
+
+  const material =
+    limit(body.material);
+
+  return `
+${basePrompt()}
 
 Create a complete study pack.
 
@@ -250,159 +256,119 @@ QUESTION STYLE:
 ${questionStyle}
 
 STUDY MATERIAL:
-${material || "No additional material was supplied. Use the topic to create the study content."}
+${material || "No notes were supplied. Generate appropriate study material from the topic."}
 
 Return ONLY valid JSON.
 
-Required JSON structure:
+Use exactly this structure:
 
 {
-  "summary": "A clear study summary using headings and bullet points.",
+  "summary": "study summary",
   "flashcards": [
     {
-      "question": "Question",
-      "answer": "Answer"
+      "question": "question",
+      "answer": "answer"
     }
   ],
   "quiz": [
     {
-      "question": "Multiple choice question",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "question": "question",
+      "options": [
+        "option A",
+        "option B",
+        "option C",
+        "option D"
+      ],
       "correctAnswer": 0,
-      "explanation": "Why this answer is correct.",
-      "topic": "Concept tested"
+      "explanation": "explanation",
+      "topic": "concept"
     }
   ],
   "practiceQuestions": [
     {
-      "question": "Practice question",
-      "answer": "Expected answer",
-      "topic": "Concept"
+      "question": "question",
+      "answer": "model answer",
+      "topic": "concept"
     }
   ],
   "examQuestions": [
     {
-      "question": "Exam-style question",
+      "question": "question",
       "marks": 5,
-      "answer": "Model answer",
-      "topic": "Concept"
+      "answer": "model answer",
+      "topic": "concept"
     }
   ]
 }
 
-Generation requirements:
-
 SUMMARY:
-- Give the important concepts.
-- Include definitions where useful.
-- Include important points, formulas or steps if they exist in the material.
-- Make it easy to revise.
+- Explain the topic clearly.
+- Include important concepts.
+- Include definitions.
+- Include important points.
+- Include formulas or steps if applicable.
+- Make it useful for revision.
 
 FLASHCARDS:
-- Generate 10 useful flashcards.
-- Do not make all cards simple definitions.
-- Include concepts, differences, applications and important facts.
+- Generate exactly 10.
+- Include definitions, concepts, differences, applications and important facts.
 
 QUIZ:
 - Generate exactly 10 MCQs.
-- Every MCQ must have exactly 4 options.
-- correctAnswer must be the ZERO-BASED option index: 0, 1, 2 or 3.
-- Include a mixture of easy, medium and challenging questions according to the selected difficulty.
-- Include the topic/concept tested.
-- Include a short explanation.
+- Every question must have exactly 4 options.
+- correctAnswer MUST be a zero-based number:
+  0, 1, 2 or 3.
+- Include easy, medium and challenging questions.
+- Include explanations.
+- Include the concept tested.
 
-QUESTION STYLE RULES:
+QUESTION STYLE:
 
-If QUESTION STYLE is "mcq":
-- Keep the 10 quiz questions as normal MCQs.
-- practiceQuestions can be empty.
+For "mcq":
+Create normal MCQs.
+practiceQuestions can be empty.
 
-If QUESTION STYLE is "mixed":
-- Make the quiz a mixture of conceptual, application and reasoning MCQs.
-- Create 5 additional practice questions.
+For "mixed":
+Create a mixture of conceptual, application and reasoning questions.
+Create 5 additional practice questions.
 
-If QUESTION STYLE is "short":
-- Keep the 10 MCQs so Knowvia can automatically score the quiz.
-- Also create 5 short-answer practice questions.
-- Each should have a concise model answer.
+For "short":
+Keep the 10 MCQs for automatic scoring.
+Also create 5 short-answer practice questions.
 
-If QUESTION STYLE is "exam":
-- Keep the 10 MCQs so Knowvia can automatically score the quiz.
-- Also create 5 exam-style questions.
-- Mix 2-mark, 5-mark and 10-mark questions.
-- Provide model answers.
-- Make them suitable for university exam preparation.
+For "exam":
+Keep the 10 MCQs for automatic scoring.
+Also create 5 university-style exam questions.
+Use a mixture of 2-mark, 5-mark and 10-mark questions.
+Give model answers.
 
 IMPORTANT:
-- Return JSON only.
-- Do not use markdown fences.
-- Do not add any explanation outside the JSON.
+Return JSON only.
+Do not use markdown code fences.
+Do not write anything before or after the JSON.
 `;
 }
 
-function buildSimplePrompt(task, body) {
-  const topic = cleanText(body.topic) || "Study Material";
-  const difficulty = cleanText(body.difficulty) || "beginner";
-  const material = limitText(body.material, 30000);
+/*
+  OTHER AI FEATURES
+*/
+function featurePrompt(task, body) {
 
-  switch (task) {
-    case "summary":
-      return `
-${baseInstruction()}
+  const topic =
+    text(body.topic) || "Study Material";
 
-Create a study summary.
+  const difficulty =
+    text(body.difficulty) || "beginner";
 
-TOPIC:
-${topic}
+  const material =
+    limit(body.material);
 
-DIFFICULTY:
-${difficulty}
+  if (task === "teach") {
 
-MATERIAL:
-${material}
+    return `
+${basePrompt()}
 
-Give:
-1. Overview
-2. Important concepts
-3. Key points
-4. Important definitions
-5. Exam-focused points
-6. Quick revision
-
-Use clear headings and bullet points.
-`;
-
-    case "flashcards":
-      return `
-${baseInstruction()}
-
-Create 10 study flashcards for:
-
-TOPIC:
-${topic}
-
-MATERIAL:
-${material}
-
-Return ONLY valid JSON:
-
-{
-  "flashcards": [
-    {
-      "question": "Question",
-      "answer": "Answer"
-    }
-  ]
-}
-
-Make the flashcards useful for revision.
-`;
-
-    case "quiz":
-      return `
-${baseInstruction()}
-
-Create 10 MCQs for:
+Teach this topic like a friendly teacher.
 
 TOPIC:
 ${topic}
@@ -413,28 +379,26 @@ ${difficulty}
 MATERIAL:
 ${material}
 
-Return ONLY valid JSON:
+Use this structure:
 
-{
-  "quiz": [
-    {
-      "question": "Question",
-      "options": ["A", "B", "C", "D"],
-      "correctAnswer": 0,
-      "explanation": "Explanation",
-      "topic": "Concept"
-    }
-  ]
-}
+1. What is it?
+2. Why is it important?
+3. Simple explanation
+4. Step-by-step explanation
+5. Example
+6. Common mistake
+7. Quick check question
 
-correctAnswer must be a zero-based option index.
+Make it easy to understand.
 `;
+  }
 
-    case "teach":
-      return `
-${baseInstruction()}
+  if (task === "study_session") {
 
-Teach the following topic like a friendly teacher.
+    return `
+${basePrompt()}
+
+Create a focused study session.
 
 TOPIC:
 ${topic}
@@ -445,46 +409,22 @@ ${difficulty}
 MATERIAL:
 ${material}
 
-Structure:
-- What is it?
-- Why is it important?
-- Simple explanation
-- Step-by-step explanation
-- Example
-- Common mistake
-- Quick check question
+Create:
 
-Use simple language but retain technical terms.
-`;
-
-    case "study_session":
-      return `
-${baseInstruction()}
-
-Create a focused study session for:
-
-TOPIC:
-${topic}
-
-DIFFICULTY:
-${difficulty}
-
-MATERIAL:
-${material}
-
-Create a practical study session containing:
 1. Warm-up
 2. Learn
 3. Active recall
 4. Practice
 5. Final revision
 
-Give approximate time suggestions and concrete activities.
+Give practical activities and approximate time suggestions.
 `;
+  }
 
-    case "exam":
-      return `
-${baseInstruction()}
+  if (task === "exam") {
+
+    return `
+${basePrompt()}
 
 Create an exam preparation set.
 
@@ -497,22 +437,27 @@ ${difficulty}
 MATERIAL:
 ${material}
 
-Generate:
-- 3 short-answer questions
-- 3 five-mark questions
-- 2 ten-mark questions
-- Important topics to revise
-- Common mistakes students should avoid
-- A final quick revision checklist
+Create:
 
-Provide model answers for every question.
+3 short-answer questions
+3 five-mark questions
+2 ten-mark questions
+
+Then provide:
+
+Important topics to revise
+Common mistakes
+Quick revision checklist
+Model answers
 `;
+  }
 
-    case "ask_notes":
-      return `
-${baseInstruction()}
+  if (task === "ask_notes") {
 
-Answer the student's question using the supplied notes as the main source.
+    return `
+${basePrompt()}
+
+Answer the student's question using the notes.
 
 TOPIC:
 ${topic}
@@ -521,69 +466,21 @@ NOTES:
 ${material}
 
 STUDENT QUESTION:
-${cleanText(body.question)}
+${text(body.question)}
 
-Answer clearly.
+Give a clear answer.
 
-If the answer cannot be found or reasonably derived from the notes, say:
-"The notes do not contain enough information to answer this completely."
-
-Then, if helpful, explain what information is missing.
+If the notes do not contain enough information,
+say so clearly instead of inventing information.
 `;
+  }
 
-    case "weak_topics":
-      return `
-${baseInstruction()}
+  if (task === "explain_mistake") {
 
-Analyze the student's quiz performance.
+    return `
+${basePrompt()}
 
-TOPIC:
-${topic}
-
-STUDY MATERIAL:
-${material}
-
-QUIZ RESULTS:
-${limitText(
-  typeof body.quizResults === "string"
-    ? body.quizResults
-    : JSON.stringify(body.quizResults || []),
-  15000
-)}
-
-Identify:
-- Weak topics
-- Why they may be difficult
-- What to revise
-- Targeted practice recommendations
-- 5 targeted re-test questions
-
-Return ONLY valid JSON:
-
-{
-  "weakTopics": [
-    {
-      "topic": "Topic",
-      "reason": "Reason",
-      "recommendation": "What to revise"
-    }
-  ],
-  "retest": [
-    {
-      "question": "Question",
-      "options": ["A", "B", "C", "D"],
-      "correctAnswer": 0,
-      "explanation": "Explanation"
-    }
-  ]
-}
-`;
-
-    case "explain_mistake":
-      return `
-${baseInstruction()}
-
-Explain a student's mistake.
+Explain the student's mistake.
 
 TOPIC:
 ${topic}
@@ -592,29 +489,59 @@ MATERIAL:
 ${material}
 
 QUESTION:
-${cleanText(body.question)}
+${text(body.question)}
 
 STUDENT ANSWER:
-${cleanText(body.studentAnswer)}
+${text(body.studentAnswer)}
 
 CORRECT ANSWER:
-${cleanText(body.correctAnswer)}
+${text(body.correctAnswer)}
 
 Explain:
-1. What the question was asking
-2. Why the student's answer was incorrect
+
+1. What the question asked
+2. Why the student's answer was wrong
 3. What the correct answer means
 4. How to remember it
 5. A similar practice question
 
-Be encouraging and never make the student feel bad.
+Be encouraging.
 `;
+  }
 
-    case "knowledge_map":
-      return `
-${baseInstruction()}
+  if (task === "summary") {
 
-Create a knowledge map for:
+    return `
+${basePrompt()}
+
+Create a clear study summary.
+
+TOPIC:
+${topic}
+
+DIFFICULTY:
+${difficulty}
+
+MATERIAL:
+${material}
+
+Include:
+
+1. Overview
+2. Important concepts
+3. Definitions
+4. Key points
+5. Exam-focused points
+6. Quick revision
+`;
+  }
+
+  if (task === "flashcards") {
+
+    return `
+${basePrompt()}
+
+Create exactly 10 flashcards.
 
 TOPIC:
 ${topic}
@@ -622,96 +549,249 @@ ${topic}
 MATERIAL:
 ${material}
 
-Return ONLY valid JSON:
+Return ONLY JSON:
 
 {
-  "title": "Knowledge Map",
-  "centralTopic": "Main topic",
-  "nodes": [
+  "flashcards": [
     {
-      "name": "Concept",
-      "description": "Short explanation",
-      "connections": ["Related concept"]
+      "question": "question",
+      "answer": "answer"
+    }
+  ]
+}
+`;
+  }
+
+  if (task === "quiz") {
+
+    return `
+${basePrompt()}
+
+Create exactly 10 MCQs.
+
+TOPIC:
+${topic}
+
+DIFFICULTY:
+${difficulty}
+
+MATERIAL:
+${material}
+
+Return ONLY JSON:
+
+{
+  "quiz": [
+    {
+      "question": "question",
+      "options": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "correctAnswer": 0,
+      "explanation": "explanation",
+      "topic": "concept"
     }
   ]
 }
 
-Include the most important concepts and how they connect.
+correctAnswer must be 0, 1, 2 or 3.
 `;
-
-    default:
-      throw new Error("Unsupported task.");
   }
+
+  if (task === "weak_topics") {
+
+    const results = limit(
+      typeof body.quizResults === "string"
+        ? body.quizResults
+        : JSON.stringify(body.quizResults || []),
+      15000
+    );
+
+    return `
+${basePrompt()}
+
+Analyze the student's quiz performance.
+
+TOPIC:
+${topic}
+
+MATERIAL:
+${material}
+
+QUIZ RESULTS:
+${results}
+
+Return ONLY JSON:
+
+{
+  "weakTopics": [
+    {
+      "topic": "topic",
+      "reason": "why it is weak",
+      "recommendation": "what to revise"
+    }
+  ],
+  "retest": [
+    {
+      "question": "question",
+      "options": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "correctAnswer": 0,
+      "explanation": "explanation"
+    }
+  ]
 }
 
+Create targeted questions based on the student's mistakes.
+`;
+  }
+
+  if (task === "knowledge_map") {
+
+    return `
+${basePrompt()}
+
+Create a knowledge map.
+
+TOPIC:
+${topic}
+
+MATERIAL:
+${material}
+
+Return ONLY JSON:
+
+{
+  "title": "Knowledge Map",
+  "centralTopic": "main topic",
+  "nodes": [
+    {
+      "name": "concept",
+      "description": "short explanation",
+      "connections": [
+        "related concept"
+      ]
+    }
+  ]
+}
+
+Show the important concepts and how they connect.
+`;
+  }
+
+  throw new Error("Unsupported task.");
+}
+
+/*
+  API HANDLER
+*/
 export default async function handler(req, res) {
+
   if (req.method !== "POST") {
+
     return res.status(405).json({
       error: "Method not allowed"
     });
   }
 
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
+
+    const apiKey =
+      process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
+
       return res.status(500).json({
-        error: "OPENAI_API_KEY is not configured in Vercel."
+        error:
+          "OPENAI_API_KEY is missing from Vercel environment variables."
       });
     }
 
     const body = getBody(req);
 
-    const requestedTask = cleanText(body.task).toLowerCase();
-    const task = taskAliases[requestedTask];
+    const task =
+      text(body.task).toLowerCase();
 
-    if (!task || !allowedTasks.has(task)) {
+    if (!ALLOWED_TASKS.has(task)) {
+
       return res.status(400).json({
-        error: `Invalid task: ${requestedTask || "empty"}`
+        error:
+          `Invalid task: ${task || "empty"}`
       });
     }
 
     let prompt;
 
     if (task === "study_pack") {
-      prompt = buildStudyPackPrompt(body);
+
+      prompt =
+        studyPackPrompt(body);
+
     } else {
-      prompt = buildSimplePrompt(task, body);
+
+      prompt =
+        featurePrompt(task, body);
     }
 
-    const output = await callOpenAI(prompt, apiKey);
+    const result =
+      await askAI(prompt, apiKey);
 
-    // Tasks that require JSON
-    const jsonTasks = new Set([
-      "study_pack",
-      "flashcards",
-      "quiz",
-      "weak_topics",
-      "knowledge_map"
-    ]);
+    /*
+      JSON-based tasks
+    */
+    if (
+      task === "study_pack" ||
+      task === "flashcards" ||
+      task === "quiz" ||
+      task === "weak_topics" ||
+      task === "knowledge_map"
+    ) {
 
-    if (jsonTasks.has(task)) {
-      const parsed = parseJSON(output);
+      const parsed =
+        parseJSON(result);
 
       if (!parsed) {
+
+        console.error(
+          "Could not parse AI JSON:",
+          result
+        );
+
         return res.status(502).json({
-          error: "The AI returned invalid JSON.",
-          raw: output
+          error:
+            "AI returned an invalid JSON response.",
+          raw: result
         });
       }
 
       return res.status(200).json(parsed);
     }
 
+    /*
+      Normal text response
+    */
     return res.status(200).json({
-      result: output
+      result: result
     });
 
   } catch (error) {
-    console.error("Knowvia API error:", error);
+
+    console.error(
+      "KNOWVIA API ERROR:",
+      error
+    );
 
     return res.status(500).json({
-      error: error?.message || "Something went wrong while generating the response."
+      error:
+        error?.message ||
+        "Something went wrong."
     });
   }
 }
