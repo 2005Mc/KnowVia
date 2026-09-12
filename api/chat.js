@@ -1,76 +1,177 @@
-// ============================================================
-// KNOWVIA - GEMINI AI BACKEND
-// Gemini Interactions API
-// ============================================================
+"use strict";
+
+/* =========================================================
+   KNOWVIA - FINAL GEMINI BACKEND
+   VERCEL SERVERLESS FUNCTION
+   ========================================================= */
 
 const MODELS = [
   "gemini-3.6-flash",
-  "gemini-3.5-flash-lite"
+  "gemini-3.5-flash"
 ];
 
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/interactions";
 
-// ============================================================
-// RESPONSE HELPER
-// ============================================================
+/* =========================================================
+   BASIC HELPERS
+   ========================================================= */
+
+function cleanText(value) {
+  return String(value ?? "")
+    .replace(/\u0000/g, "")
+    .trim();
+}
 
 function send(res, status, data) {
   return res.status(status).json(data);
 }
 
-// ============================================================
-// CLEAN JSON
-// ============================================================
+/* =========================================================
+   ROBUST JSON EXTRACTION
+   ========================================================= */
 
-function cleanJSON(text) {
-  if (!text) return "";
+function extractJSON(text) {
+  if (!text) {
+    throw new Error("Gemini returned an empty response.");
+  }
 
-  let value = String(text).trim();
+  let cleaned = cleanText(text);
 
-  value = value.replace(/^```json\s*/i, "");
-  value = value.replace(/^```\s*/i, "");
-  value = value.replace(/\s*```$/i, "");
+  /* Remove markdown fences */
+  cleaned = cleaned
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
 
-  const firstObject = value.indexOf("{");
-  const lastObject = value.lastIndexOf("}");
+  /* Direct JSON parse */
+  try {
+    return JSON.parse(cleaned);
+  } catch {}
+
+  /*
+   * Find either an object or array.
+   */
+  const objectStart = cleaned.indexOf("{");
+  const arrayStart = cleaned.indexOf("[");
+
+  let start = -1;
 
   if (
-    firstObject !== -1 &&
-    lastObject !== -1 &&
-    lastObject > firstObject
+    objectStart !== -1 &&
+    arrayStart !== -1
   ) {
-    value = value.slice(
-      firstObject,
-      lastObject + 1
+    start = Math.min(
+      objectStart,
+      arrayStart
+    );
+  } else if (objectStart !== -1) {
+    start = objectStart;
+  } else if (arrayStart !== -1) {
+    start = arrayStart;
+  }
+
+  if (start === -1) {
+    throw new Error(
+      "Gemini did not return valid JSON."
     );
   }
 
-  return value.trim();
+  const opening = cleaned[start];
+  const closing =
+    opening === "{" ? "}" : "]";
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (
+    let i = start;
+    i < cleaned.length;
+    i++
+  ) {
+    const char = cleaned[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      continue;
+    }
+
+    if (char === opening) {
+      depth++;
+    } else if (char === closing) {
+      depth--;
+
+      if (depth === 0) {
+        const candidate =
+          cleaned.slice(start, i + 1);
+
+        try {
+          return JSON.parse(candidate);
+        } catch {
+          break;
+        }
+      }
+    }
+  }
+
+  throw new Error(
+    "Gemini returned malformed JSON."
+  );
 }
 
-// ============================================================
-// EXTRACT GEMINI TEXT
-// ============================================================
+/* =========================================================
+   GET TEXT FROM GEMINI INTERACTIONS RESPONSE
+   ========================================================= */
 
-function getModelText(data) {
-  if (!data) return "";
+function getGeminiText(data) {
+  if (!data) {
+    return "";
+  }
 
   if (Array.isArray(data.steps)) {
-    for (const step of data.steps) {
-      if (step.type !== "model_output") continue;
+    const textParts = [];
 
-      if (!Array.isArray(step.content)) continue;
+    for (const step of data.steps) {
+      if (
+        step?.type !== "model_output"
+      ) {
+        continue;
+      }
+
+      if (
+        !Array.isArray(step.content)
+      ) {
+        continue;
+      }
 
       for (const item of step.content) {
         if (
-          item &&
-          item.type === "text" &&
+          item?.type === "text" &&
           typeof item.text === "string"
         ) {
-          return item.text;
+          textParts.push(item.text);
         }
       }
+    }
+
+    if (textParts.length) {
+      return textParts.join("\n");
     }
   }
 
@@ -84,12 +185,13 @@ function getModelText(data) {
   return "";
 }
 
-// ============================================================
-// GEMINI REQUEST
-// ============================================================
+/* =========================================================
+   GEMINI API CALL
+   ========================================================= */
 
 async function callGemini(prompt) {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey =
+    process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
     throw new Error(
@@ -101,40 +203,43 @@ async function callGemini(prompt) {
 
   for (const model of MODELS) {
     try {
-      console.log("Trying Gemini model:", model);
-
-      // IMPORTANT:
-      // No response_format
-      // No generation_config
-      // No mime_type
-
-      const body = {
-        model,
-        input: prompt,
-        store: false
-      };
-
-      const response = await fetch(
-        GEMINI_API_URL,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": apiKey
-          },
-          body: JSON.stringify(body)
-        }
+      console.log(
+        "Knowvia: trying Gemini model:",
+        model
       );
 
-      const rawText = await response.text();
+      const response =
+        await fetch(
+          GEMINI_API_URL,
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              "x-goog-api-key":
+                apiKey
+            },
+
+            body: JSON.stringify({
+              model,
+              input: prompt,
+              store: false
+            })
+          }
+        );
+
+      const raw =
+        await response.text();
 
       let data;
 
       try {
-        data = JSON.parse(rawText);
+        data = JSON.parse(raw);
       } catch {
         throw new Error(
-          `Gemini returned a non-JSON response: ${rawText.slice(
+          `Gemini returned a non-JSON response: ${raw.slice(
             0,
             500
           )}`
@@ -144,29 +249,34 @@ async function callGemini(prompt) {
       if (!response.ok) {
         const message =
           data?.error?.message ||
-          `Gemini request failed with status ${response.status}`;
+          `Gemini request failed with status ${response.status}.`;
 
         console.error(
-          `Gemini ${model} error:`,
-          data
+          "Gemini API error:",
+          message
         );
 
-        lastError = new Error(message);
+        lastError =
+          new Error(message);
+
         continue;
       }
 
-      const text = getModelText(data);
+      const text =
+        getGeminiText(data);
 
       if (!text) {
-        lastError = new Error(
-          "Gemini returned an empty response."
-        );
+        lastError =
+          new Error(
+            "Gemini returned an empty response."
+          );
 
         continue;
       }
 
       console.log(
-        `Gemini ${model} succeeded.`
+        "Knowvia: Gemini succeeded:",
+        model
       );
 
       return text;
@@ -183,15 +293,17 @@ async function callGemini(prompt) {
 
   throw (
     lastError ||
-    new Error("Gemini request failed.")
+    new Error(
+      "Gemini request failed."
+    )
   );
 }
 
-// ============================================================
-// DIFFICULTY INSTRUCTIONS
-// ============================================================
+/* =========================================================
+   DIFFICULTY
+   ========================================================= */
 
-function getDifficultyInstructions(
+function difficultyInstruction(
   difficulty
 ) {
   const level =
@@ -200,106 +312,105 @@ function getDifficultyInstructions(
 
   if (level === "easy") {
     return `
-EASY LEVEL:
+DIFFICULTY: EASY
 
-- Use very simple student-friendly language.
-- Assume the learner is a beginner.
-- Explain basic ideas first.
-- Define technical words immediately.
-- Use simple everyday examples.
-- Avoid unnecessarily advanced terminology.
-- Focus on understanding the foundation.
-- Quiz questions should test basic recall and understanding.
-- Flashcards should focus on definitions, basic concepts and simple examples.
+Create genuinely beginner-level material.
+
+Use:
+- very simple language
+- basic concepts
+- simple definitions
+- simple examples
+- basic applications
+- foundational understanding
+- easy recall questions
+
+Avoid unnecessary advanced terminology,
+complex relationships and advanced analysis.
+
+The content must be genuinely easier,
+not simply shorter.
 `;
   }
 
   if (level === "hard") {
     return `
-HARD LEVEL:
+DIFFICULTY: HARD
 
-- Give an advanced, detailed explanation.
-- Assume the learner already understands the fundamentals.
-- Use appropriate technical terminology.
-- Explain mechanisms and relationships between concepts.
-- Include complex or realistic examples.
-- Include applications and limitations.
-- Include comparisons where useful.
-- Connect related concepts.
-- Quiz questions should require analysis, application, relationships or exam-level reasoning.
-- Flashcards should test deeper understanding, mechanisms, comparisons and applications.
+Create genuinely advanced material.
+
+Use:
+- deeper technical explanation
+- advanced terminology
+- mechanisms
+- relationships between concepts
+- complex examples
+- practical applications
+- limitations
+- comparisons
+- trade-offs
+- analytical reasoning
+- exam-level understanding
+
+Do not merely make Easy content longer.
+
+The concepts, examples, reasoning and depth
+must genuinely become more advanced.
 `;
   }
 
   return `
-MEDIUM LEVEL:
+DIFFICULTY: MEDIUM
 
-- Use clear but moderately technical language.
-- Assume the learner knows basic terminology.
-- Explain concepts with moderate depth.
-- Include technical terms with explanations.
-- Include examples and practical applications.
-- Include relationships between important concepts.
-- Quiz questions should test understanding and application.
-- Flashcards should include concepts, examples, relationships and applications.
+Create moderately detailed material.
+
+Use:
+- clear definitions
+- technical terminology
+- detailed concepts
+- examples
+- applications
+- relationships
+- moderate reasoning
+- exam-relevant understanding
+
+Medium must be deeper than Easy
+but less advanced than Hard.
 `;
 }
 
-// ============================================================
-// STUDY PACK PROMPT
-// ============================================================
+/* =========================================================
+   STUDY PACK PROMPT
+   ========================================================= */
 
-function studyPackPrompt(body) {
-  const topic =
-    body.topic?.trim() ||
-    "General Topic";
-
-  const difficulty =
-    body.difficulty ||
-    "Medium";
-
-  const material =
-    body.material?.trim() ||
-    "";
-
-  const quizStyle =
-    body.quizStyle ||
-    "Mixed";
-
-  const difficultyInstructions =
-    getDifficultyInstructions(
-      difficulty
-    );
-
+function studyPackPrompt(
+  material,
+  difficulty,
+  questionStyle
+) {
   return `
 You are Knowvia, an AI-powered study assistant.
 
-Your job is to create a COMPLETE STUDY PACK.
-
-TOPIC:
-${topic}
-
-SELECTED DIFFICULTY:
-${difficulty}
-
-QUESTION STYLE:
-${quizStyle}
+Create a COMPLETE STUDY PACK from the supplied material.
 
 SOURCE MATERIAL:
-${
-  material ||
-  "No user-provided material was supplied. Use reliable general knowledge."
-}
+${material}
 
-${difficultyInstructions}
+${difficultyInstruction(
+  difficulty
+)}
 
-============================================================
+QUESTION STYLE:
+${questionStyle || "Mixed"}
+
+==================================================
 STUDY MATTER
-============================================================
+==================================================
 
-Create comprehensive study material.
+Create comprehensive material that a student
+can directly study from.
 
-Include the following sections whenever they are applicable:
+Include relevant sections:
 
 1. Introduction
 2. Definition
@@ -308,127 +419,124 @@ Include the following sections whenever they are applicable:
 5. Types / Classification
 6. Components / Elements
 7. Working / Process / Mechanism
-8. Important Characteristics
+8. Characteristics
 9. Examples
 10. Applications
 11. Advantages
-12. Limitations / Disadvantages
-13. Comparison with Related Concepts
+12. Limitations
+13. Comparison
 14. Important Exam Points
 15. Quick Revision
 
-Do NOT force irrelevant sections onto topics where they do not apply.
+Do NOT invent irrelevant sections.
 
-The content must genuinely match the selected difficulty.
+If a section does not apply to the topic,
+use an empty array or a short appropriate statement.
 
-Easy must NOT simply be Medium with shorter sentences.
+The selected difficulty must affect the ACTUAL CONTENT.
 
-Medium must contain more technical depth than Easy.
+Easy:
+simple foundational explanation.
 
-Hard must contain substantially deeper technical explanation than Medium.
+Medium:
+moderate technical depth.
 
-If user-provided material exists, prioritize it.
-Do not contradict the supplied material.
+Hard:
+advanced technical explanation,
+relationships, mechanisms, analysis,
+applications and limitations.
 
-============================================================
+==================================================
 FLASHCARDS
-============================================================
+==================================================
 
 Create EXACTLY 10 flashcards.
 
-Every flashcard must contain:
+Each must contain:
 
 question
 answer
 
-Generate them from the study matter.
+Cover different important concepts.
 
-The flashcards must match the selected difficulty.
+Do not repeat the same concept unnecessarily.
 
-============================================================
+==================================================
 QUIZ
-============================================================
+==================================================
 
-Create EXACTLY 10 multiple-choice questions.
+Create EXACTLY 10 questions.
 
-Every question MUST have:
+Each question must contain:
 
-- exactly 4 options
-- exactly 1 correct answer
-- correctAnswer as 0, 1, 2 or 3
-- explanation
+question
+options
+correctAnswer
+explanation
 
-The quiz MUST be based on the study matter you generated above.
+Every question must have EXACTLY 4 options.
 
-Difficulty rules:
+correctAnswer must be an integer:
 
-Easy:
-- basic recall
-- definitions
-- simple understanding
+0
+1
+2
+3
 
-Medium:
-- understanding
-- interpretation
-- application
-- moderate reasoning
+There must be exactly ONE correct answer.
 
-Hard:
-- analysis
-- application
-- relationships
-- mechanisms
-- comparisons
-- exam-level reasoning
+The quiz must be based on the generated study matter.
 
-Question style:
-${quizStyle}
+Difficulty:
 
-If the style is MCQ:
-Use standard multiple-choice questions.
+EASY:
+basic recall and understanding.
 
-If the style is Exam Pattern:
-Make the questions similar to college examination preparation.
+MEDIUM:
+understanding, interpretation,
+comparison and application.
 
-If the style is Mixed:
-Mix recall, understanding and application.
+HARD:
+analysis, relationships,
+mechanisms, application,
+limitations and exam-level reasoning.
 
-============================================================
-IMPORTANT JSON RULES
-============================================================
+==================================================
+JSON
+==================================================
 
 Return ONLY valid JSON.
 
-Do NOT use Markdown.
+No Markdown fences.
 
-Do NOT add text before the JSON.
+No explanation before JSON.
 
-Do NOT add text after the JSON.
+No explanation after JSON.
 
-Use EXACTLY this structure:
+Use exactly this structure:
 
 {
-  "topic": "${topic.replace(/"/g, '\\"')}",
-  "difficulty": "${difficulty}",
+  "topic": "string",
+  "difficulty": "string",
   "studyMatter": {
     "introduction": "string",
     "definition": "string",
     "coreConcept": "string",
-    "keyConcepts": ["string"],
-    "types": ["string"],
-    "components": ["string"],
+    "keyConcepts": [],
+    "types": [],
+    "components": [],
     "working": "string",
-    "characteristics": ["string"],
-    "examples": ["string"],
-    "applications": ["string"],
-    "advantages": ["string"],
-    "limitations": ["string"],
-    "comparison": ["string"],
-    "examPoints": ["string"],
-    "quickRevision": ["string"]
+    "characteristics": [],
+    "examples": [],
+    "applications": [],
+    "advantages": [],
+    "limitations": [],
+    "comparison": [],
+    "importantExamPoints": [],
+    "quickRevision": []
   },
   "summary": "string",
-  "keyConcepts": ["string"],
+  "keyConcepts": [],
   "flashcards": [
     {
       "question": "string",
@@ -450,99 +558,254 @@ Use EXACTLY this structure:
   ]
 }
 
-FINAL CHECK BEFORE RESPONDING:
+FINAL CHECK:
 
-- Exactly 10 flashcards.
-- Exactly 10 quiz questions.
-- Exactly 4 options for every quiz question.
-- Exactly one correct option per question.
-- Every correctAnswer is 0, 1, 2 or 3.
-- Quiz is based on the generated study matter.
-- Difficulty genuinely matches ${difficulty}.
-- Return valid JSON only.
+- exactly 10 flashcards
+- exactly 10 quiz questions
+- exactly 4 options per quiz
+- exactly one correct option
+- correctAnswer is 0, 1, 2 or 3
+- quiz is based on study matter
+- flashcards are based on study matter
+- difficulty genuinely matches ${difficulty}
+- valid JSON only
 `;
 }
 
-// ============================================================
-// FLASHCARDS
-// ============================================================
+/* =========================================================
+   NORMALIZE STUDY PACK
+   ========================================================= */
 
-function flashcardsPrompt(body) {
+function normalizeStudyPack(pack) {
+  if (
+    !pack ||
+    typeof pack !== "object"
+  ) {
+    throw new Error(
+      "Invalid study pack returned by Gemini."
+    );
+  }
+
+  const studyMatter =
+    pack.studyMatter || {};
+
+  const arrayFields = [
+    "keyConcepts",
+    "types",
+    "components",
+    "characteristics",
+    "examples",
+    "applications",
+    "advantages",
+    "limitations",
+    "comparison",
+    "importantExamPoints",
+    "quickRevision"
+  ];
+
+  const textFields = [
+    "introduction",
+    "definition",
+    "coreConcept",
+    "working"
+  ];
+
+  for (const field of arrayFields) {
+    if (!Array.isArray(studyMatter[field])) {
+      studyMatter[field] = [];
+    }
+
+    studyMatter[field] =
+      studyMatter[field]
+        .map(cleanText)
+        .filter(Boolean);
+  }
+
+  for (const field of textFields) {
+    studyMatter[field] =
+      cleanText(studyMatter[field]);
+  }
+
+  const flashcards =
+    Array.isArray(pack.flashcards)
+      ? pack.flashcards
+      : [];
+
+  const quiz =
+    Array.isArray(pack.quiz)
+      ? pack.quiz
+      : [];
+
+  if (flashcards.length !== 10) {
+    throw new Error(
+      `Gemini returned ${flashcards.length} flashcards. Exactly 10 are required.`
+    );
+  }
+
+  if (quiz.length !== 10) {
+    throw new Error(
+      `Gemini returned ${quiz.length} quiz questions. Exactly 10 are required.`
+    );
+  }
+
+  const normalizedFlashcards =
+    flashcards.map(
+      (card, index) => {
+        if (
+          !card ||
+          typeof card.question !==
+            "string" ||
+          typeof card.answer !==
+            "string"
+        ) {
+          throw new Error(
+            `Flashcard ${index + 1} is invalid.`
+          );
+        }
+
+        return {
+          question:
+            cleanText(card.question),
+          answer:
+            cleanText(card.answer)
+        };
+      }
+    );
+
+  const normalizedQuiz =
+    quiz.map(
+      (question, index) => {
+        if (
+          !question ||
+          typeof question.question !==
+            "string" ||
+          !Array.isArray(
+            question.options
+          ) ||
+          question.options.length !==
+            4 ||
+          typeof question.explanation !==
+            "string"
+        ) {
+          throw new Error(
+            `Quiz question ${index + 1} is invalid.`
+          );
+        }
+
+        const correct =
+          Number(
+            question.correctAnswer
+          );
+
+        if (
+          !Number.isInteger(correct) ||
+          correct < 0 ||
+          correct > 3
+        ) {
+          throw new Error(
+            `Quiz question ${index + 1} has an invalid correct answer.`
+          );
+        }
+
+        const options =
+          question.options.map(
+            cleanText
+          );
+
+        if (
+          options.some(
+            option => !option
+          )
+        ) {
+          throw new Error(
+            `Quiz question ${index + 1} contains an empty option.`
+          );
+        }
+
+        return {
+          question:
+            cleanText(
+              question.question
+            ),
+          options,
+          correctAnswer: correct,
+          explanation:
+            cleanText(
+              question.explanation
+            )
+        };
+      }
+    );
+
+  return {
+    topic:
+      cleanText(pack.topic),
+
+    difficulty:
+      cleanText(pack.difficulty),
+
+    studyMatter,
+
+    summary:
+      cleanText(pack.summary),
+
+    keyConcepts:
+      Array.isArray(
+        pack.keyConcepts
+      )
+        ? pack.keyConcepts
+            .map(cleanText)
+            .filter(Boolean)
+        : [],
+
+    flashcards:
+      normalizedFlashcards,
+
+    quiz:
+      normalizedQuiz
+  };
+}
+
+/* =========================================================
+   QUIZ PROMPT
+   ========================================================= */
+
+function quizPrompt(
+  material,
+  difficulty,
+  questionStyle,
+  focusTopics
+) {
   return `
 You are Knowvia.
 
-Create EXACTLY 10 flashcards from the supplied study material.
-
-TOPIC:
-${body.topic || "Study Topic"}
-
-DIFFICULTY:
-${body.difficulty || "Medium"}
+Create a targeted quiz from the supplied study material.
 
 STUDY MATERIAL:
-${body.material || "No additional material supplied."}
-
-${getDifficultyInstructions(
-  body.difficulty
-)}
-
-Rules:
-
-- Exactly 10 flashcards.
-- Each has question and answer.
-- Do not repeat the same concept unnecessarily.
-- Cover important concepts.
-- Match the selected difficulty.
-- Use the supplied material whenever possible.
-
-Return ONLY valid JSON.
-
-{
-  "flashcards": [
-    {
-      "question": "string",
-      "answer": "string"
-    }
-  ]
-}
-`;
-}
-
-// ============================================================
-// QUIZ
-// ============================================================
-
-function quizPrompt(body) {
-  return `
-You are Knowvia.
-
-Create EXACTLY 10 MCQ questions.
-
-TOPIC:
-${body.topic || "Study Topic"}
+${material}
 
 DIFFICULTY:
-${body.difficulty || "Medium"}
+${difficulty}
 
 QUESTION STYLE:
-${body.quizStyle || "Mixed"}
+${questionStyle || "Mixed"}
 
-STUDY MATTER:
-${body.material || "No additional material supplied."}
+FOCUS:
+${focusTopics || "All major concepts"}
 
-${getDifficultyInstructions(
-  body.difficulty
+${difficultyInstruction(
+  difficulty
 )}
 
-Rules:
+Create EXACTLY 10 questions.
 
-- Exactly 10 questions.
-- Exactly 4 options per question.
-- Exactly one correct answer.
-- correctAnswer must be 0, 1, 2 or 3.
-- Include explanation.
-- Avoid ambiguous questions.
-- Questions must be based on the supplied study matter.
+Each question must have:
+
+- question
+- exactly 4 options
+- exactly one correct answer
+- correctAnswer as 0, 1, 2 or 3
+- explanation
 
 Return ONLY valid JSON.
 
@@ -564,43 +827,51 @@ Return ONLY valid JSON.
 `;
 }
 
-// ============================================================
-// WEAK TOPICS + TARGETED RETEST
-// ============================================================
+/* =========================================================
+   WEAK TOPICS
+   ========================================================= */
 
-function weakTopicsPrompt(body) {
+function weakTopicsPrompt(
+  material,
+  wrongQuestions
+) {
   return `
 You are Knowvia's Weak Topic Detector.
 
-Analyze the learner's quiz performance.
+STUDY MATERIAL:
+${material}
 
-QUIZ RESULTS:
-
+INCORRECT QUESTIONS:
 ${JSON.stringify(
-  body.quizResults || [],
+  wrongQuestions || [],
   null,
   2
 )}
 
-Identify the concepts where the learner performed poorly.
+Identify concepts where the student
+appears to have difficulty.
 
-Then create a targeted re-test.
+Only use evidence from the supplied
+questions and study material.
 
-Rules:
+Then create a targeted retest.
 
-- Identify weak concepts only from the supplied quiz results.
-- Do not invent performance information.
-- Create EXACTLY 5 re-test questions.
-- Every question has exactly 4 options.
-- Exactly one answer is correct.
-- Questions should focus on weak concepts.
-- correctAnswer must be 0, 1, 2 or 3.
-- Include explanation.
+Create EXACTLY 5 retest questions.
+
+Each retest question must have:
+
+- question
+- exactly 4 options
+- exactly one correct answer
+- correctAnswer 0, 1, 2 or 3
+- explanation
 
 Return ONLY valid JSON.
 
 {
-  "weakTopics": ["string"],
+  "weakTopics": [
+    "string"
+  ],
   "explanation": "string",
   "retestQuiz": [
     {
@@ -619,29 +890,29 @@ Return ONLY valid JSON.
 `;
 }
 
-// ============================================================
-// KNOWLEDGE MAP
-// ============================================================
+/* =========================================================
+   KNOWLEDGE MAP
+   ========================================================= */
 
-function knowledgeMapPrompt(body) {
+function knowledgeMapPrompt(
+  material
+) {
   return `
-You are Knowvia's Knowledge Map system.
+You are Knowvia's Knowledge Map generator.
 
-Analyze these quiz results:
+Create a knowledge map from the study material.
 
-${JSON.stringify(
-  body.quizResults || [],
-  null,
-  2
-)}
+STUDY MATERIAL:
+${material}
 
-Classify important concepts as:
+Identify:
 
-Strong
-Developing
-Weak
-
-Use ONLY information supported by the quiz results.
+- central topic
+- major concepts
+- related concepts
+- relationships
+- supporting concepts
+- applications where relevant
 
 Return ONLY valid JSON.
 
@@ -649,30 +920,36 @@ Return ONLY valid JSON.
   "nodes": [
     {
       "topic": "string",
-      "status": "Strong",
-      "reason": "string"
+      "relatedTo": [
+        "string"
+      ],
+      "description": "string"
     }
   ]
 }
 `;
 }
 
-// ============================================================
-// TEXT FEATURES
-// ============================================================
+/* =========================================================
+   TEACH / SESSION / EXAM / NOTES / MISTAKE
+   ========================================================= */
 
-function textPrompt(task, body) {
+function textPrompt(
+  task,
+  body
+) {
+  const material =
+    cleanText(body.material);
+
   const topic =
-    body.topic ||
+    cleanText(body.topic) ||
     "the current study topic";
 
-  const material =
-    body.material ||
-    "";
-
   const difficulty =
-    body.difficulty ||
-    "Medium";
+    cleanText(
+      body.difficulty ||
+      "Medium"
+    );
 
   if (task === "teach") {
     return `
@@ -685,24 +962,31 @@ DIFFICULTY:
 ${difficulty}
 
 STUDY MATERIAL:
-${material || "Use reliable general knowledge."}
+${material}
+
+${difficultyInstruction(
+  difficulty
+)}
 
 Teach progressively.
 
-Do NOT simply repeat a summary.
+Do NOT simply copy the study material.
 
-Use this sequence:
+Use:
 
-Step 1: What the learner should know first
-Step 2: Build the basic idea
-Step 3: Introduce the next concept
-Step 4: Connect the concepts
-Step 5: Give an example
-Step 6: Ask a quick check question
-Step 7: Correctly explain the expected reasoning
-Step 8: Final recap
+1. Start with the basic idea
+2. Build understanding
+3. Introduce important concepts
+4. Connect concepts
+5. Give examples
+6. Give a quick check question
+7. Explain the reasoning
+8. Finish with exam takeaways
 
-Make the teaching appropriate for ${difficulty} level.
+Use headings.
+
+Make the teaching genuinely appropriate
+for ${difficulty} level.
 `;
   }
 
@@ -717,32 +1001,26 @@ DIFFICULTY:
 ${difficulty}
 
 STUDY MATERIAL:
-${material || "Use reliable general knowledge."}
+${material}
 
-Create an actionable session using:
+Create a progressive study session:
 
 1. LEARN
-What to understand first.
-
 2. RECALL
-What to remember without looking.
-
 3. PRACTICE
-A practical activity or questions.
-
 4. REVIEW
-What to revise after practice.
-
 5. FINAL CHECK
-How the learner can test themselves.
 
-Make it progressive and practical.
+The session must tell the student
+what to do at each stage.
+
+Do not merely repeat the summary.
 `;
   }
 
   if (task === "exam") {
     return `
-You are Knowvia's Exam Mode.
+You are Knowvia's Exam Mode tutor.
 
 TOPIC:
 ${topic}
@@ -751,22 +1029,24 @@ DIFFICULTY:
 ${difficulty}
 
 STUDY MATERIAL:
-${material || "Use reliable general knowledge."}
+${material}
 
-Create an exam-style preparation experience.
+Create an exam preparation experience.
 
 Include:
 
 1. Important exam areas
 2. High-priority concepts
-3. Likely question patterns
-4. Practice questions
-5. Application questions
-6. Common mistakes
-7. Last-minute revision checklist
+3. Likely question areas
+4. Short-answer practice
+5. Conceptual questions
+6. Application/reasoning questions
+7. Common mistakes
+8. Final revision checklist
 
-Match the difficulty to ${difficulty}.
-Do not simply repeat the summary.
+Match the difficulty exactly.
+
+Do not simply copy the study material.
 `;
   }
 
@@ -775,22 +1055,24 @@ Do not simply repeat the summary.
 You are Knowvia's Ask My Notes assistant.
 
 SUPPLIED NOTES:
-
 ${material}
 
 STUDENT QUESTION:
+${cleanText(body.question)}
 
-${body.question || ""}
-
-Answer the student's question using the supplied notes.
+Answer using the supplied notes.
 
 Rules:
 
-- Prefer information explicitly present in the notes.
-- Do not pretend unsupported information is in the notes.
-- If the notes do not contain enough information, clearly say so.
-- You may explain information from the notes in simpler language.
-- Keep the answer relevant to the question.
+- Prefer information explicitly contained
+  in the notes.
+- Explain the notes in simpler language
+  when useful.
+- Do not pretend unsupported information
+  exists in the notes.
+- If the notes do not contain enough
+  information, clearly say so.
+- Stay focused on the student's question.
 `;
   }
 
@@ -798,154 +1080,530 @@ Rules:
     return `
 You are Knowvia's mistake explanation tutor.
 
+STUDY MATERIAL:
+${material}
+
 QUESTION:
-${body.question || ""}
+${cleanText(body.question)}
 
 STUDENT ANSWER:
-${body.studentAnswer || ""}
+${cleanText(
+  body.selectedAnswer ||
+  body.studentAnswer
+)}
 
 CORRECT ANSWER:
-${body.correctAnswer || ""}
+${cleanText(body.correctAnswer)}
 
 Explain:
 
-1. What the learner misunderstood.
-2. Why the correct answer is correct.
-3. What clue should have been noticed.
-4. How to avoid the same mistake next time.
+1. What the question is testing
+2. What the student misunderstood
+3. Why the correct answer is correct
+4. What concept should be remembered
+5. How to avoid the same mistake
 
-Be encouraging and simple.
+Be encouraging and concise.
 `;
   }
 
   return `
-You are Knowvia, an AI study assistant.
+You are Knowvia.
 
-Topic:
+TOPIC:
 ${topic}
 
-Material:
+STUDY MATERIAL:
 ${material}
 
-Give a useful student-friendly response.
+Give a useful student-friendly explanation.
 `;
 }
 
-// ============================================================
-// MAIN HANDLER
-// ============================================================
+/* =========================================================
+   VALIDATE QUIZ
+   ========================================================= */
 
-export default async function handler(req, res) {
-
-  if (req.method !== "POST") {
-    return send(res, 405, {
-      error: "Method not allowed."
-    });
+function validateQuiz(
+  quiz,
+  requiredCount = 10
+) {
+  if (
+    !Array.isArray(quiz) ||
+    quiz.length !== requiredCount
+  ) {
+    throw new Error(
+      `Gemini returned ${quiz?.length || 0} quiz questions. Exactly ${requiredCount} are required.`
+    );
   }
 
-  try {
+  return quiz.map(
+    (item, index) => {
+      if (
+        !item ||
+        typeof item.question !==
+          "string" ||
+        !Array.isArray(item.options) ||
+        item.options.length !== 4 ||
+        typeof item.explanation !==
+          "string"
+      ) {
+        throw new Error(
+          `Quiz question ${index + 1} is invalid.`
+        );
+      }
 
-    const body = req.body || {};
-    const task = body.task;
+      const correct =
+        Number(
+          item.correctAnswer
+        );
 
-    if (!task) {
-      return send(res, 400, {
-        error: "Missing task."
+      if (
+        !Number.isInteger(correct) ||
+        correct < 0 ||
+        correct > 3
+      ) {
+        throw new Error(
+          `Quiz question ${index + 1} has an invalid correct answer.`
+        );
+      }
+
+      return {
+        question:
+          cleanText(item.question),
+
+        options:
+          item.options.map(cleanText),
+
+        correctAnswer:
+          correct,
+
+        explanation:
+          cleanText(item.explanation)
+      };
+    }
+  );
+}
+
+/* =========================================================
+   MAIN VERCEL HANDLER
+   ========================================================= */
+
+module.exports =
+  async function handler(
+    req,
+    res
+  ) {
+
+    if (req.method !== "POST") {
+      return send(res, 405, {
+        error:
+          "Method not allowed."
       });
     }
 
-    let prompt;
-    let isJSON = false;
+    try {
+      const body =
+        req.body || {};
 
-    switch (task) {
+      const task =
+        cleanText(body.task);
 
-      case "study_pack":
-        prompt = studyPackPrompt(body);
-        isJSON = true;
-        break;
-
-      case "flashcards":
-        prompt = flashcardsPrompt(body);
-        isJSON = true;
-        break;
-
-      case "quiz":
-        prompt = quizPrompt(body);
-        isJSON = true;
-        break;
-
-      case "weak_topics":
-        prompt = weakTopicsPrompt(body);
-        isJSON = true;
-        break;
-
-      case "knowledge_map":
-        prompt = knowledgeMapPrompt(body);
-        isJSON = true;
-        break;
-
-      case "teach":
-      case "study_session":
-      case "exam":
-      case "ask_notes":
-      case "explain_mistake":
-        prompt = textPrompt(task, body);
-        break;
-
-      default:
-        return send(res, 400, {
-          error: `Unknown task: ${task}`
-        });
-    }
-
-    const answer =
-      await callGemini(prompt);
-
-    if (isJSON) {
-
-      const cleaned =
-        cleanJSON(answer);
-
-      try {
-
-        const parsed =
-          JSON.parse(cleaned);
-
-        return send(res, 200, {
-          result: parsed,
-          answer: cleaned
-        });
-
-      } catch (error) {
-
-        console.error(
-          "Gemini JSON parsing failed:",
-          cleaned
+      const difficulty =
+        cleanText(
+          body.difficulty ||
+          "Medium"
         );
 
-        return send(res, 500, {
+      const questionStyle =
+        cleanText(
+          body.questionStyle ||
+          body.quizStyle ||
+          "Mixed"
+        );
+
+      if (!task) {
+        return send(res, 400, {
           error:
-            "Gemini returned invalid JSON. Please try again.",
-          raw: cleaned
+            "Task is required."
         });
       }
+
+      /* ================================================
+         STUDY PACK
+         ================================================ */
+
+      if (
+        task === "study_pack"
+      ) {
+        const material =
+          cleanText(
+            body.material
+          );
+
+        if (!material) {
+          return send(res, 400, {
+            error:
+              "Study material is required."
+          });
+        }
+
+        const prompt =
+          studyPackPrompt(
+            material,
+            difficulty,
+            questionStyle
+          );
+
+        const responseText =
+          await callGemini(
+            prompt
+          );
+
+        const parsed =
+          extractJSON(
+            responseText
+          );
+
+        const normalized =
+          normalizeStudyPack(
+            parsed
+          );
+
+        return send(res, 200, {
+          result:
+            normalized
+        });
+      }
+
+      /* ================================================
+         TARGETED QUIZ
+         ================================================ */
+
+      if (
+        task === "quiz"
+      ) {
+        const material =
+          cleanText(
+            body.material
+          );
+
+        if (!material) {
+          return send(res, 400, {
+            error:
+              "Study material is required."
+          });
+        }
+
+        const prompt =
+          quizPrompt(
+            material,
+            difficulty,
+            questionStyle,
+            body.focusTopics
+          );
+
+        const responseText =
+          await callGemini(
+            prompt
+          );
+
+        const parsed =
+          extractJSON(
+            responseText
+          );
+
+        const quiz =
+          Array.isArray(parsed)
+            ? parsed
+            : parsed?.quiz;
+
+        const validated =
+          validateQuiz(
+            quiz,
+            10
+          );
+
+        return send(res, 200, {
+          result:
+            validated
+        });
+      }
+
+      /* ================================================
+         WEAK TOPICS
+         ================================================ */
+
+      if (
+        task === "weak_topics"
+      ) {
+        const material =
+          cleanText(
+            body.material
+          );
+
+        const wrongQuestions =
+          Array.isArray(
+            body.wrongQuestions
+          )
+            ? body.wrongQuestions
+            : Array.isArray(
+                body.quizResults
+              )
+              ? body.quizResults
+              : [];
+
+        const prompt =
+          weakTopicsPrompt(
+            material,
+            wrongQuestions
+          );
+
+        const responseText =
+          await callGemini(
+            prompt
+          );
+
+        const parsed =
+          extractJSON(
+            responseText
+          );
+
+        const retest =
+          Array.isArray(
+            parsed?.retestQuiz
+          )
+            ? parsed.retestQuiz
+            : [];
+
+        if (
+          retest.length !== 5
+        ) {
+          throw new Error(
+            "Gemini did not return exactly 5 targeted retest questions."
+          );
+        }
+
+        const validated =
+          validateQuiz(
+            retest,
+            5
+          );
+
+        return send(res, 200, {
+          result: {
+            weakTopics:
+              Array.isArray(
+                parsed?.weakTopics
+              )
+                ? parsed.weakTopics
+                : [],
+
+            explanation:
+              cleanText(
+                parsed?.explanation
+              ),
+
+            retestQuiz:
+              validated
+          }
+        });
+      }
+
+      /* ================================================
+         KNOWLEDGE MAP
+         ================================================ */
+
+      if (
+        task === "knowledge_map"
+      ) {
+        const material =
+          cleanText(
+            body.material
+          );
+
+        const prompt =
+          knowledgeMapPrompt(
+            material
+          );
+
+        const responseText =
+          await callGemini(
+            prompt
+          );
+
+        const parsed =
+          extractJSON(
+            responseText
+          );
+
+        return send(res, 200, {
+          result:
+            parsed
+        });
+      }
+
+      /* ================================================
+         TEACH ME
+         ================================================ */
+
+      if (
+        task === "teach"
+      ) {
+        const prompt =
+          textPrompt(
+            "teach",
+            {
+              ...body,
+              difficulty
+            }
+          );
+
+        const answer =
+          await callGemini(
+            prompt
+          );
+
+        return send(res, 200, {
+          answer
+        });
+      }
+
+      /* ================================================
+         STUDY SESSION
+         ================================================ */
+
+      if (
+        task === "study_session"
+      ) {
+        const prompt =
+          textPrompt(
+            "study_session",
+            {
+              ...body,
+              difficulty
+            }
+          );
+
+        const answer =
+          await callGemini(
+            prompt
+          );
+
+        return send(res, 200, {
+          answer
+        });
+      }
+
+      /* ================================================
+         EXAM MODE
+         ================================================ */
+
+      if (
+        task === "exam"
+      ) {
+        const prompt =
+          textPrompt(
+            "exam",
+            {
+              ...body,
+              difficulty
+            }
+          );
+
+        const answer =
+          await callGemini(
+            prompt
+          );
+
+        return send(res, 200, {
+          answer
+        });
+      }
+
+      /* ================================================
+         ASK MY NOTES
+         ================================================ */
+
+      if (
+        task === "ask_notes"
+      ) {
+        const material =
+          cleanText(
+            body.material
+          );
+
+        const question =
+          cleanText(
+            body.question
+          );
+
+        if (
+          !material ||
+          !question
+        ) {
+          return send(res, 400, {
+            error:
+              "Study material and question are required."
+          });
+        }
+
+        const answer =
+          await callGemini(
+            textPrompt(
+              "ask_notes",
+              {
+                ...body,
+                material,
+                question
+              }
+            )
+          );
+
+        return send(res, 200, {
+          answer
+        });
+      }
+
+      /* ================================================
+         EXPLAIN MY MISTAKE
+         ================================================ */
+
+      if (
+        task === "explain_mistake"
+      ) {
+        const answer =
+          await callGemini(
+            textPrompt(
+              "explain_mistake",
+              body
+            )
+          );
+
+        return send(res, 200, {
+          answer
+        });
+      }
+
+      /* ================================================
+         UNKNOWN TASK
+         ================================================ */
+
+      return send(res, 400, {
+        error:
+          `Unknown task: ${task}`
+      });
+
+    } catch (error) {
+      console.error(
+        "KNOWVIA API ERROR:",
+        error
+      );
+
+      return send(res, 500, {
+        error:
+          error?.message ||
+          "Something went wrong while contacting Gemini."
+      });
     }
-
-    return send(res, 200, {
-      answer
-    });
-
-  } catch (error) {
-
-    console.error(
-      "KNOWVIA API ERROR:",
-      error
-    );
-
-    return send(res, 500, {
-      error:
-        error?.message ||
-        "Something went wrong while contacting Gemini."
-    });
-  }
-}
+  };
