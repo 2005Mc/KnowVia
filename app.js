@@ -3610,10 +3610,64 @@ function escapeHTML(
 ========================================================= */
 
 function formatText(text) {
-
   if (!text) return "";
 
-  let html = escapeHTML(text);
+  let raw = String(text)
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
+
+  // Fix cases where bullet is on one line and its text is on the next line.
+  // Example:
+  // •
+  // Optical flow estimates motion
+  //
+  // becomes:
+  // • Optical flow estimates motion
+  const lines = raw.split("\n");
+  const fixedLines = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const current = lines[i].trim();
+
+    // Bullet alone on a line
+    if (
+      (current === "•" ||
+       current === "●" ||
+       current === "▪" ||
+       current === "-" ||
+       current === "*") &&
+      i + 1 < lines.length
+    ) {
+      const next = lines[i + 1].trim();
+
+      if (next) {
+        fixedLines.push(`${current} ${next}`);
+        i++;
+        continue;
+      }
+    }
+
+    // Number alone on a line
+    // Example:
+    // 1.
+    // Input image
+    if (/^\d+\.$/.test(current) && i + 1 < lines.length) {
+      const next = lines[i + 1].trim();
+
+      if (next) {
+        fixedLines.push(`${current} ${next}`);
+        i++;
+        continue;
+      }
+    }
+
+    fixedLines.push(lines[i]);
+  }
+
+  raw = fixedLines.join("\n");
+
+  // Escape HTML first
+  let html = escapeHTML(raw);
 
   // Bold text
   html = html.replace(
@@ -3621,21 +3675,21 @@ function formatText(text) {
     "<strong>$1</strong>"
   );
 
-  // Keep bullet and its content on the SAME LINE
+  // Convert bullet lines into a single visual line
   html = html.replace(
-    /(^|\n)\s*[•●▪◦]\s*(.+)/g,
-    "$1<div class=\"formatted-bullet\">• $2</div>"
+    /(^|\n)([•●▪*-])\s*(.*?)(?=\n|$)/g,
+    '$1<div class="formatted-bullet"><span class="bullet-symbol">$2</span><span class="bullet-text">$3</span></div>'
   );
 
-  // Keep numbered points together
+  // Convert numbered lines into a single visual line
   html = html.replace(
-    /(^|\n)\s*(\d+)\.\s*(.+)/g,
-    "$1<div class=\"formatted-number\">$2. $3</div>"
+    /(^|\n)(\d+)\.\s*(.*?)(?=\n|$)/g,
+    '$1<div class="formatted-number"><span class="number-symbol">$2.</span><span class="number-text">$3</span></div>'
   );
 
-  // Paragraphs
+  // Paragraph breaks
   html = html.replace(
-    /\n\n+/g,
+    /\n{2,}/g,
     "</p><p>"
   );
 
@@ -3645,9 +3699,8 @@ function formatText(text) {
     "<br>"
   );
 
-  return `<div class="formatted-content">${html}</div>`;
+  return html;
 }
-
 
 /* =========================================================
    INITIAL STATE
