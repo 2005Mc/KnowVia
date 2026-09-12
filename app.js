@@ -3616,84 +3616,66 @@ function formatText(text) {
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n");
 
-  // Fix cases where bullet is on one line and its text is on the next line.
-  // Example:
-  // •
-  // Optical flow estimates motion
-  //
-  // becomes:
-  // • Optical flow estimates motion
-  const lines = raw.split("\n");
-  const fixedLines = [];
+  // Remove bullet symbols and numbering
+  raw = raw
+    .replace(/^\s*[•●▪◦‣]\s*/gm, "")
+    .replace(/^\s*[-*]\s+/gm, "")
+    .replace(/^\s*\d+[\.\)]\s+/gm, "");
 
-  for (let i = 0; i < lines.length; i++) {
-    const current = lines[i].trim();
+  // Remove markdown heading symbols
+  raw = raw.replace(/^\s*#{1,6}\s*/gm, "");
 
-    // Bullet alone on a line
-    if (
-      (current === "•" ||
-       current === "●" ||
-       current === "▪" ||
-       current === "-" ||
-       current === "*") &&
-      i + 1 < lines.length
-    ) {
-      const next = lines[i + 1].trim();
+  // Clean unnecessary empty lines
+  raw = raw.replace(/\n{3,}/g, "\n\n");
 
-      if (next) {
-        fixedLines.push(`${current} ${next}`);
-        i++;
-        continue;
-      }
-    }
-
-    // Number alone on a line
-    // Example:
-    // 1.
-    // Input image
-    if (/^\d+\.$/.test(current) && i + 1 < lines.length) {
-      const next = lines[i + 1].trim();
-
-      if (next) {
-        fixedLines.push(`${current} ${next}`);
-        i++;
-        continue;
-      }
-    }
-
-    fixedLines.push(lines[i]);
-  }
-
-  raw = fixedLines.join("\n");
-
-  // Escape HTML first
+  // Escape HTML
   let html = escapeHTML(raw);
 
-  // Bold text
+  // Highlight markdown bold text
   html = html.replace(
     /\*\*(.*?)\*\*/g,
     "<strong>$1</strong>"
   );
 
-  // Convert bullet lines into a single visual line
-  html = html.replace(
-    /(^|\n)([•●▪*-])\s*(.*?)(?=\n|$)/g,
-    '$1<div class="formatted-bullet"><span class="bullet-symbol">$2</span><span class="bullet-text">$3</span></div>'
-  );
+  // Highlight common section headings.
+  // These are only formatting changes; the actual matter is untouched.
+  const headings = [
+    "How It Works",
+    "Key Features",
+    "Key Concepts",
+    "Components",
+    "Types",
+    "Examples",
+    "Real-World Applications",
+    "Applications",
+    "Advantages",
+    "Limitations",
+    "Important Points",
+    "Common Mistakes",
+    "Exam Tips",
+    "Prerequisites",
+    "Terminology",
+    "Comparisons",
+    "Practice Questions",
+    "Exam Questions"
+  ];
 
-  // Convert numbered lines into a single visual line
-  html = html.replace(
-    /(^|\n)(\d+)\.\s*(.*?)(?=\n|$)/g,
-    '$1<div class="formatted-number"><span class="number-symbol">$2.</span><span class="number-text">$3</span></div>'
-  );
+  headings.forEach((heading) => {
+    const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-  // Paragraph breaks
+    html = html.replace(
+      new RegExp(`(^|<br>)(\\s*)(${escapedHeading})(\\s*)(?=<br>|$)`, "gi"),
+      '$1<div class="study-heading">$3</div>'
+    );
+  });
+
+  // Paragraph spacing
   html = html.replace(
     /\n{2,}/g,
     "</p><p>"
   );
 
-  // Remaining single line breaks
+  // Normal line breaks
   html = html.replace(
     /\n/g,
     "<br>"
@@ -3701,7 +3683,6 @@ function formatText(text) {
 
   return html;
 }
-
 /* =========================================================
    INITIAL STATE
 ========================================================= */
