@@ -3616,29 +3616,31 @@ function formatText(text) {
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n");
 
-  // Remove bullet symbols and numbering
-  raw = raw
-    .replace(/^\s*[•●▪◦‣]\s*/gm, "")
-    .replace(/^\s*[-*]\s+/gm, "")
-    .replace(/^\s*\d+[\.\)]\s+/gm, "");
+  // Remove bullet symbols
+  raw = raw.replace(/^\s*[•●▪◦‣]\s*/gm, "");
+
+  // Remove dash/star bullets
+  raw = raw.replace(/^\s*[-*]\s+/gm, "");
+
+  // Remove numbered list markers
+  raw = raw.replace(/^\s*\d+[\.\)]\s*/gm, "");
 
   // Remove markdown heading symbols
   raw = raw.replace(/^\s*#{1,6}\s*/gm, "");
 
-  // Clean unnecessary empty lines
+  // Remove unnecessary empty lines
   raw = raw.replace(/\n{3,}/g, "\n\n");
 
   // Escape HTML
   let html = escapeHTML(raw);
 
-  // Highlight markdown bold text
+  // Convert bold markdown
   html = html.replace(
     /\*\*(.*?)\*\*/g,
     "<strong>$1</strong>"
   );
 
-  // Highlight common section headings.
-  // These are only formatting changes; the actual matter is untouched.
+  // Section headings to highlight
   const headings = [
     "How It Works",
     "Key Features",
@@ -3661,25 +3663,20 @@ function formatText(text) {
   ];
 
   headings.forEach((heading) => {
-    const escapedHeading = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escapedHeading =
+      heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
     html = html.replace(
-      new RegExp(`(^|<br>)(\\s*)(${escapedHeading})(\\s*)(?=<br>|$)`, "gi"),
-      '$1<div class="study-heading">$3</div>'
+      new RegExp(
+        `(^|\\n)\\s*(${escapedHeading})\\s*(?=\\n|$)`,
+        "gi"
+      ),
+      '$1<div class="study-heading">$2</div>'
     );
   });
 
-  // Paragraph spacing
-  html = html.replace(
-    /\n{2,}/g,
-    "</p><p>"
-  );
-
-  // Normal line breaks
-  html = html.replace(
-    /\n/g,
-    "<br>"
-  );
+  // Convert remaining line breaks
+  html = html.replace(/\n/g, "<br>");
 
   return html;
 }
