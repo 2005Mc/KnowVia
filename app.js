@@ -3609,34 +3609,43 @@ function escapeHTML(
    FORMAT TEXT
 ========================================================= */
 
-function formatText(
-  text
-) {
+function formatText(text) {
 
-  if (
-    text === null ||
-    text === undefined
-  ) {
+  if (!text) return "";
 
-    return "";
-  }
+  let html = escapeHTML(text);
 
+  // Bold text
+  html = html.replace(
+    /\*\*(.*?)\*\*/g,
+    "<strong>$1</strong>"
+  );
 
-  return escapeHTML(
-    String(text)
-  )
-    .replace(
-      /\*\*(.*?)\*\*/g,
-      "<strong>$1</strong>"
-    )
-    .replace(
-      /\n\n+/g,
-      "</p><p>"
-    )
-    .replace(
-      /\n/g,
-      "<br>"
-    );
+  // Keep bullet and its content on the SAME LINE
+  html = html.replace(
+    /(^|\n)\s*[•●▪◦]\s*(.+)/g,
+    "$1<div class=\"formatted-bullet\">• $2</div>"
+  );
+
+  // Keep numbered points together
+  html = html.replace(
+    /(^|\n)\s*(\d+)\.\s*(.+)/g,
+    "$1<div class=\"formatted-number\">$2. $3</div>"
+  );
+
+  // Paragraphs
+  html = html.replace(
+    /\n\n+/g,
+    "</p><p>"
+  );
+
+  // Remaining single line breaks
+  html = html.replace(
+    /\n/g,
+    "<br>"
+  );
+
+  return `<div class="formatted-content">${html}</div>`;
 }
 
 
